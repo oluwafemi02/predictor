@@ -71,6 +71,45 @@ class Match(db.Model):
     
     # Predictions
     predictions = db.relationship('Prediction', backref='match')
+    odds = db.relationship('MatchOdds', backref='match')
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class MatchOdds(db.Model):
+    __tablename__ = 'match_odds'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    match_id = db.Column(db.Integer, db.ForeignKey('matches.id'), nullable=False)
+    fixture_id = db.Column(db.Integer)  # RapidAPI fixture ID
+    league_id = db.Column(db.Integer)  # RapidAPI league ID
+    bookmaker_id = db.Column(db.Integer)  # Bookmaker ID from RapidAPI
+    bookmaker_name = db.Column(db.String(100))
+    
+    # Match Winner odds (1X2)
+    home_win_odds = db.Column(db.Float)
+    draw_odds = db.Column(db.Float)
+    away_win_odds = db.Column(db.Float)
+    
+    # Over/Under 2.5 goals
+    over_2_5_odds = db.Column(db.Float)
+    under_2_5_odds = db.Column(db.Float)
+    
+    # Both Teams to Score
+    btts_yes_odds = db.Column(db.Float)
+    btts_no_odds = db.Column(db.Float)
+    
+    # Asian Handicap
+    home_handicap = db.Column(db.Float)
+    home_handicap_odds = db.Column(db.Float)
+    away_handicap = db.Column(db.Float)
+    away_handicap_odds = db.Column(db.Float)
+    
+    # Additional odds data (JSON for flexibility)
+    additional_odds = db.Column(db.JSON)
+    
+    # Metadata
+    update_timestamp = db.Column(db.DateTime)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import logging
-from models import db, Team, Player, Match, TeamStatistics, Injury, PlayerPerformance, HeadToHead
+from models import db, Team, Player, Match, TeamStatistics, Injury, PlayerPerformance, HeadToHead, MatchOdds
 from config import Config
 
 logging.basicConfig(level=logging.INFO)
@@ -337,3 +337,243 @@ class FreeSportsDataCollector:
         except Exception as e:
             logger.error(f"Error fetching next matches: {str(e)}")
             return []
+
+# RapidAPI Football Odds Collector
+class RapidAPIFootballOddsCollector:
+    def __init__(self):
+        self.api_key = Config.RAPIDAPI_KEY
+        self.api_host = Config.RAPIDAPI_HOST
+        self.base_url = Config.RAPIDAPI_ODDS_BASE_URL
+        self.headers = {
+            'x-rapidapi-key': self.api_key,
+            'x-rapidapi-host': self.api_host
+        }
+    
+    def fetch_leagues(self) -> List[Dict]:
+        """Fetch available leagues with odds"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/leagues",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get('api', {}).get('leagues', [])
+        except Exception as e:
+            logger.error(f"Error fetching leagues: {str(e)}")
+            return []
+    
+    def fetch_bookmakers(self) -> List[Dict]:
+        """Fetch available bookmakers"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/bookmakers",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get('api', {}).get('bookmakers', [])
+        except Exception as e:
+            logger.error(f"Error fetching bookmakers: {str(e)}")
+            return []
+    
+    def fetch_odds_by_league(self, league_id: int, bookmaker_id: int = 5, page: int = 1) -> Dict:
+        """Fetch odds for a specific league and bookmaker"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/league/{league_id}/bookmaker/{bookmaker_id}",
+                headers=self.headers,
+                params={'page': page}
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching odds for league {league_id}: {str(e)}")
+            return {}
+    
+    def fetch_odds_by_fixture(self, fixture_id: int) -> Dict:
+        """Fetch odds for a specific fixture from all bookmakers"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/fixture/{fixture_id}",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching odds for fixture {fixture_id}: {str(e)}")
+            return {}
+    
+    def fetch_odds_by_date(self, date: str) -> Dict:
+        """Fetch odds for all fixtures on a specific date (YYYY-MM-DD)"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/date/{date}",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching odds for date {date}: {str(e)}")
+            return {}
+    
+    def parse_odds_data(self, odds_data: Dict) -> Dict:
+        """Parse odds data from API response into a structured format"""
+        parsed_odds = {
+            'match_winner': {},
+            'over_under_2_5': {},
+            'btts': {},
+            'asian_handicap': {},
+            'other': {}
+        }
+        
+        for bet_type in odds_data:
+            bet_label = bet_type.get('labelName', '')
+            values = bet_type.get('values', [])
+            
+            if bet_label == 'Match Winner':
+                for value in values:
+                    if value.get('value') == 'Home':
+                        parsed_odds['match_winner']['home'] = float(value.get('odd', 0))
+                    elif value.get('value') == 'Draw':
+                        parsed_odds['match_winner']['draw'] = float(value.get('odd', 0))
+                    elif value.get('value') == 'Away':
+                        parsed_odds['match_winner']['away'] = float(value.get('odd', 0))
+            
+            elif bet_label == 'Goals Over/Under' and '2.5' in str(values):
+                for value in values:
+                    if 'Over' in value.get('value', ''):
+                        parsed_odds['over_under_2_5']['over'] = float(value.get('odd', 0))
+                    elif 'Under' in value.get('value', ''):
+                        parsed_odds['over_under_2_5']['under'] = float(value.get('odd', 0))
+            
+            elif bet_label == 'Both Teams Score':
+                for value in values:
+                    if value.get('value') == 'Yes':
+                        parsed_odds['btts']['yes'] = float(value.get('odd', 0))
+                    elif value.get('value') == 'No':
+                        parsed_odds['btts']['no'] = float(value.get('odd', 0))
+            
+            elif 'Asian Handicap' in bet_label:
+                parsed_odds['asian_handicap'][bet_label] = values
+            
+            else:
+                parsed_odds['other'][bet_label] = values
+        
+        return parsed_odds
+    
+    def sync_odds_for_match(self, match: Match, fixture_id: int):
+        """Sync odds data for a specific match"""
+        odds_response = self.fetch_odds_by_fixture(fixture_id)
+        
+        if not odds_response or 'api' not in odds_response:
+            logger.warning(f"No odds data found for fixture {fixture_id}")
+            return
+        
+        odds_data = odds_response['api'].get('odds', [])
+        
+        for bookmaker_odds in odds_data:
+            bookmaker = bookmaker_odds.get('bookmakers', [{}])[0]
+            if not bookmaker:
+                continue
+            
+            bookmaker_id = bookmaker.get('bookmaker_id')
+            bookmaker_name = bookmaker.get('bookmaker_name')
+            bets = bookmaker.get('bets', [])
+            
+            if not bets:
+                continue
+            
+            # Parse odds data
+            parsed_odds = self.parse_odds_data(bets)
+            
+            # Check if odds already exist for this match and bookmaker
+            match_odds = MatchOdds.query.filter_by(
+                match_id=match.id,
+                bookmaker_id=bookmaker_id
+            ).first()
+            
+            if not match_odds:
+                match_odds = MatchOdds(
+                    match_id=match.id,
+                    fixture_id=fixture_id,
+                    bookmaker_id=bookmaker_id,
+                    bookmaker_name=bookmaker_name
+                )
+                db.session.add(match_odds)
+            
+            # Update odds values
+            match_odds.home_win_odds = parsed_odds['match_winner'].get('home')
+            match_odds.draw_odds = parsed_odds['match_winner'].get('draw')
+            match_odds.away_win_odds = parsed_odds['match_winner'].get('away')
+            
+            match_odds.over_2_5_odds = parsed_odds['over_under_2_5'].get('over')
+            match_odds.under_2_5_odds = parsed_odds['over_under_2_5'].get('under')
+            
+            match_odds.btts_yes_odds = parsed_odds['btts'].get('yes')
+            match_odds.btts_no_odds = parsed_odds['btts'].get('no')
+            
+            # Store additional odds in JSON
+            match_odds.additional_odds = {
+                'asian_handicap': parsed_odds['asian_handicap'],
+                'other': parsed_odds['other']
+            }
+            
+            match_odds.update_timestamp = datetime.utcnow()
+        
+        db.session.commit()
+        logger.info(f"Updated odds for match {match.id} (fixture {fixture_id})")
+    
+    def sync_league_odds(self, league_id: int, bookmaker_id: int = 5, max_pages: int = 5):
+        """Sync odds for all matches in a league"""
+        for page in range(1, max_pages + 1):
+            odds_response = self.fetch_odds_by_league(league_id, bookmaker_id, page)
+            
+            if not odds_response or 'api' not in odds_response:
+                break
+            
+            odds_data = odds_response['api'].get('odds', [])
+            if not odds_data:
+                break
+            
+            for fixture_odds in odds_data:
+                fixture = fixture_odds.get('fixture', {})
+                fixture_id = fixture.get('fixture_id')
+                
+                if not fixture_id:
+                    continue
+                
+                # Try to find matching match in database
+                # This is a simplified matching - you might need more sophisticated logic
+                home_team_name = fixture.get('homeTeam', {}).get('team_name')
+                away_team_name = fixture.get('awayTeam', {}).get('team_name')
+                
+                if not home_team_name or not away_team_name:
+                    continue
+                
+                # Find teams
+                home_team = Team.query.filter_by(name=home_team_name).first()
+                away_team = Team.query.filter_by(name=away_team_name).first()
+                
+                if not home_team or not away_team:
+                    logger.warning(f"Teams not found: {home_team_name} vs {away_team_name}")
+                    continue
+                
+                # Find match
+                match_date = datetime.fromisoformat(fixture.get('event_timestamp', '').replace('Z', '+00:00'))
+                match = Match.query.filter_by(
+                    home_team_id=home_team.id,
+                    away_team_id=away_team.id,
+                    match_date=match_date
+                ).first()
+                
+                if match:
+                    self.sync_odds_for_match(match, fixture_id)
+                else:
+                    logger.warning(f"Match not found for fixture {fixture_id}")
+            
+            logger.info(f"Processed page {page} of league {league_id} odds")
+            
+            # Check if there are more pages
+            if len(odds_data) < 10:  # Assuming 10 results per page
+                break
