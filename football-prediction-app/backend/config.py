@@ -12,6 +12,11 @@ class Config:
     FOOTBALL_API_KEY = os.environ.get('FOOTBALL_API_KEY')
     FOOTBALL_API_BASE_URL = 'https://api.football-data.org/v4/'  # Example API
     
+    # RapidAPI Football Odds Configuration
+    RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY') or '7de1fabbd3msh5a337f636c66c3dp144f56jsn18f9de3aa911'
+    RAPIDAPI_HOST = 'api-football-v1.p.rapidapi.com'
+    RAPIDAPI_ODDS_BASE_URL = 'https://api-football-v1.p.rapidapi.com/v2/odds'
+    
     # Redis Configuration
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
     
