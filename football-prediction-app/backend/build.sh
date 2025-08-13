@@ -3,9 +3,6 @@
 
 set -o errexit
 
-# Install dependencies
-pip install -r requirements.txt
-
 # Run database migrations if Flask-Migrate is being used
 if [ -d "migrations" ]; then
     echo "Running database migrations..."

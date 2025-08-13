@@ -3,7 +3,7 @@ services:
     name: football-prediction-backend
     runtime: python
     rootDir: football-prediction-app/backend
-    buildCommand: "./build.sh"
+    buildCommand: "cd .. && cd .. && pip install -r requirements.txt && cd football-prediction-app/backend && chmod +x build.sh && ./build.sh"
     startCommand: "gunicorn app:app"
     envVars:
       - key: PYTHON_VERSION
