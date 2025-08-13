@@ -49,6 +49,17 @@ export interface Team {
   founded: number;
 }
 
+export interface TeamWithStats extends Team {
+  matches_played?: number;
+  wins?: number;
+  draws?: number;
+  losses?: number;
+  goals_for?: number;
+  goals_against?: number;
+  points?: number;
+  form?: string | null;
+}
+
 export interface TeamStatistics {
   season: string;
   matches_played: number;
@@ -109,6 +120,8 @@ export interface Prediction {
   both_teams_score_probability: number;
   confidence_score: number;
   factors: Record<string, string>;
+  created_at: string;
+  model_version?: string;
 }
 
 export interface HeadToHead {
@@ -151,14 +164,29 @@ export interface PaginationResponse<T> {
   };
 }
 
+// Error response interface
+export interface APIError {
+  status: 'error';
+  message: string;
+  field?: string;
+  code?: string;
+}
+
+// Success response wrapper
+export interface APIResponse<T> {
+  status: 'success';
+  data: T;
+  message?: string;
+}
+
 // API Functions
 
 // Teams
-export const getTeams = async (competition?: string) => {
-  const response = await api.get<{ teams: Team[] }>('/teams', {
+export const getTeams = async (competition?: string): Promise<TeamWithStats[]> => {
+  const response = await api.get<APIResponse<{ teams: TeamWithStats[] }>>('/teams', {
     params: { competition },
   });
-  return response.data.teams;
+  return response.data.data.teams;
 };
 
 export const getTeamDetails = async (teamId: number, season?: string) => {
@@ -196,6 +224,16 @@ export const getMatchDetails = async (matchId: number) => {
     match: MatchDetails;
     head_to_head: HeadToHead | null;
     prediction: Prediction | null;
+    team_form: {
+      home_team: {
+        form: string;
+        recent_matches: number;
+      };
+      away_team: {
+        form: string;
+        recent_matches: number;
+      };
+    };
   }>(`/matches/${matchId}`);
   return response.data;
 };
@@ -225,6 +263,13 @@ export const getUpcomingPredictions = async () => {
   return response.data.predictions;
 };
 
+export const getUpcomingMatches = async (limit?: number) => {
+  const response = await api.get<{ matches: Match[] }>('/upcoming-matches', {
+    params: { limit }
+  });
+  return response.data.matches;
+};
+
 // Statistics
 export const getCompetitions = async () => {
   const response = await api.get<{ competitions: string[] }>('/statistics/competitions');
@@ -232,10 +277,16 @@ export const getCompetitions = async () => {
 };
 
 export const getLeagueTable = async (competition: string, season?: string) => {
-  const response = await api.get<{ table: LeagueTableEntry[] }>('/statistics/league-table', {
+  const response = await api.get<{
+    competition: string;
+    season: string;
+    available_seasons: string[];
+    table: LeagueTableEntry[];
+    last_updated: string;
+  }>('/statistics/league-table', {
     params: { competition, season },
   });
-  return response.data.table;
+  return response.data;
 };
 
 // Model
@@ -244,6 +295,32 @@ export const getModelStatus = async () => {
     is_trained: boolean;
     model_version: string;
     features: string[];
+    last_trained?: string;
+    training_data?: {
+      total_matches: number;
+      finished_matches: number;
+      validation_split: number;
+    };
+    performance?: {
+      accuracy: number;
+      precision: number;
+      recall: number;
+      f1_score: number;
+      ready_for_predictions: boolean;
+      confidence_calibrated: boolean;
+    };
+    model_insights?: {
+      top_features: Array<{
+        name: string;
+        importance: number;
+      }>;
+      ensemble_weights: {
+        xgboost: number;
+        lightgbm: number;
+        random_forest: number;
+        gradient_boosting: number;
+      };
+    };
   }>('/model/status');
   return response.data;
 };

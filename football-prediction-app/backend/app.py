@@ -1,26 +1,22 @@
 import os
-from flask import Flask, request
+import atexit
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from models import db
 from config import config
 from api_routes import api_bp
+from exceptions import FootballAPIError, ValidationError, APIKeyError
 
 def create_app(config_name=None):
     if config_name is None:
         config_name = os.environ.get('FLASK_ENV', 'development')
     
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
     app.config.from_object(config[config_name])
     
     # Initialize extensions
     db.init_app(app)
-    
-    # Configure CORS with more specific settings
-    CORS(app, 
-         origins=app.config['CORS_ORIGINS'],
-         allow_headers=app.config.get('CORS_ALLOW_HEADERS', ['Content-Type']),
-         methods=app.config.get('CORS_ALLOW_METHODS', ['GET', 'POST']),
-         supports_credentials=app.config.get('CORS_SUPPORTS_CREDENTIALS', False))
+    CORS(app, origins=app.config['CORS_ORIGINS'])
     
     # Register blueprints
     app.register_blueprint(api_bp)
@@ -32,16 +28,53 @@ def create_app(config_name=None):
     except ImportError:
         print("Warning: real_data_routes not available")
     
-    # Add CORS headers to all responses
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin and any(origin.startswith(allowed) or (allowed == '*') for allowed in app.config['CORS_ORIGINS']):
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
+    # Error handlers
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(error):
+        response = {
+            'status': 'error',
+            'message': error.message,
+            'type': 'validation_error'
+        }
+        if error.field:
+            response['field'] = error.field
+        return jsonify(response), error.status_code
+    
+    @app.errorhandler(APIKeyError)
+    def handle_api_key_error(error):
+        return jsonify({
+            'status': 'error',
+            'message': error.message,
+            'type': 'api_key_error'
+        }), error.status_code
+    
+    @app.errorhandler(FootballAPIError)
+    def handle_football_api_error(error):
+        return jsonify({
+            'status': 'error',
+            'message': error.message,
+            'type': 'api_error'
+        }), error.status_code
+    
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        # Check if this is an API route
+        if error.request.path.startswith('/api/'):
+            return jsonify({
+                'status': 'error',
+                'message': 'Resource not found',
+                'type': 'not_found_error'
+            }), 404
+        # For non-API routes, serve the React app
+        return app.send_static_file('index.html')
+    
+    @app.errorhandler(500)
+    def handle_internal_error(error):
+        return jsonify({
+            'status': 'error',
+            'message': 'Internal server error',
+            'type': 'internal_error'
+        }), 500
     
     # Create database tables only if not in production or if explicitly requested
     # In production, we'll handle this separately to avoid startup issues
@@ -53,8 +86,24 @@ def create_app(config_name=None):
             except Exception as e:
                 print(f"Warning: Could not create database tables: {e}")
     
+    # Initialize scheduler if enabled and this is the scheduler instance
+    # For Render: Set ENABLE_SCHEDULER=true and IS_SCHEDULER_INSTANCE=true on only one service
+    if app.config.get('ENABLE_SCHEDULER', False) and os.environ.get('IS_SCHEDULER_INSTANCE', 'false').lower() == 'true':
+        from scheduler import data_scheduler
+        data_scheduler.init_app(app)
+        data_scheduler.start()
+        
+        # Register cleanup on app shutdown
+        atexit.register(lambda: data_scheduler.shutdown())
+    elif app.config.get('ENABLE_SCHEDULER', False):
+        print("Scheduler is enabled but this is not the scheduler instance (IS_SCHEDULER_INSTANCE != true)")
+    
     @app.route('/')
     def index():
+        # Serve React app for root route
+        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
+            return app.send_static_file('index.html')
+        # Otherwise, return API info
         return {
             'message': 'Football Prediction API',
             'version': '1.0',
@@ -113,6 +162,15 @@ def create_app(config_name=None):
             },
             'api_key_configured': bool(app.config.get('FOOTBALL_API_KEY'))
         }
+    
+    # Catch-all route for React app - must be last
+    @app.route('/<path:path>')
+    def serve_react_app(path):
+        # Serve static files if they exist
+        if os.path.exists(os.path.join(app.static_folder, path)):
+            return send_from_directory(app.static_folder, path)
+        # Otherwise serve the React app
+        return app.send_static_file('index.html')
     
     return app
 
