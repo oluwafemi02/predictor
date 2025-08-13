@@ -28,24 +28,7 @@ import {
 } from '@mui/material';
 import { Search, SportsSoccer, Stadium, EmojiEvents } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getTeams, getCompetitions } from '../services/api';
-
-interface TeamWithStats {
-  id: number;
-  name: string;
-  code: string;
-  logo_url: string;
-  stadium: string;
-  founded: number;
-  matches_played?: number;
-  wins?: number;
-  draws?: number;
-  losses?: number;
-  goals_for?: number;
-  goals_against?: number;
-  points?: number;
-  form?: string;
-}
+import { getTeams, getCompetitions, TeamWithStats } from '../services/api';
 
 type OrderBy = 'name' | 'points' | 'wins' | 'goals_for' | 'goal_difference';
 type Order = 'asc' | 'desc';
