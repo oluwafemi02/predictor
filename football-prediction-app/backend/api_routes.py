@@ -641,3 +641,28 @@ def get_data_stats():
             'message': 'Failed to get statistics',
             'error': str(e)
         })
+
+@api_bp.route('/database/init', methods=['POST'])
+def init_database():
+    """Initialize database tables"""
+    try:
+        # Create all tables
+        db.create_all()
+        
+        # Test with a simple query
+        from sqlalchemy import text
+        result = db.session.execute(text('SELECT 1')).scalar()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Database tables created successfully',
+            'test_query': result == 1
+        })
+    except Exception as e:
+        logger.error(f"Database initialization error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to initialize database',
+            'error': str(e),
+            'hint': 'Check if DATABASE_URL is properly configured in Render'
+        })

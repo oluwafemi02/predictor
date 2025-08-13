@@ -72,17 +72,28 @@ def create_app(config_name=None):
     @app.route('/health')
     def health():
         """Health check endpoint"""
+        db_status = 'unknown'
+        db_error = None
+        
         try:
             # Test database connection
-            db.session.execute('SELECT 1')
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
+            db.session.commit()
             db_status = 'connected'
-        except:
+        except Exception as e:
             db_status = 'disconnected'
+            db_error = str(e)
             
         return {
             'status': 'healthy',
             'environment': config_name,
-            'database': db_status,
+            'database': {
+                'status': db_status,
+                'error': db_error,
+                'uri_configured': bool(app.config.get('SQLALCHEMY_DATABASE_URI')),
+                'is_postgresql': 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+            },
             'api_key_configured': bool(app.config.get('FOOTBALL_API_KEY'))
         }
     
