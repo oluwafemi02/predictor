@@ -1,0 +1,52 @@
+
+> frontend@0.1.0 start
+> react-scripts start
+
+(node:6757) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:6757) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+Starting the development server...
+
+Compiled with warnings.
+
+[eslint] 
+src/components/Layout.tsx
+  Line 24:16:  'AnalyticsIcon' is defined but never used  @typescript-eslint/no-unused-vars
+
+src/pages/MatchDetails.tsx
+  Line 3:27:  'CircularProgress' is defined but never used  @typescript-eslint/no-unused-vars
+
+src/pages/Matches.tsx
+  Line 5:3:   'Card' is defined but never used          @typescript-eslint/no-unused-vars
+  Line 6:3:   'CardContent' is defined but never used   @typescript-eslint/no-unused-vars
+  Line 34:3:  'SportsSoccer' is defined but never used  @typescript-eslint/no-unused-vars
+
+src/pages/Predictions.tsx
+  Line 16:3:  'TextField' is defined but never used                     @typescript-eslint/no-unused-vars
+  Line 26:3:  'TrendingUp' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 29:3:  'MoneyOff' is defined but never used                      @typescript-eslint/no-unused-vars
+  Line 58:9:  'getProbabilityColor' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/Layout.tsx
+  Line 24:16:  'AnalyticsIcon' is defined but never used  @typescript-eslint/no-unused-vars
+
+src/pages/MatchDetails.tsx
+  Line 3:27:  'CircularProgress' is defined but never used  @typescript-eslint/no-unused-vars
+
+src/pages/Matches.tsx
+  Line 5:3:   'Card' is defined but never used          @typescript-eslint/no-unused-vars
+  Line 6:3:   'CardContent' is defined but never used   @typescript-eslint/no-unused-vars
+  Line 34:3:  'SportsSoccer' is defined but never used  @typescript-eslint/no-unused-vars
+
+src/pages/Predictions.tsx
+  Line 16:3:  'TextField' is defined but never used                     @typescript-eslint/no-unused-vars
+  Line 26:3:  'TrendingUp' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 29:3:  'MoneyOff' is defined but never used                      @typescript-eslint/no-unused-vars
+  Line 58:9:  'getProbabilityColor' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
