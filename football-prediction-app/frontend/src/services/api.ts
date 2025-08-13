@@ -242,6 +242,13 @@ export const getUpcomingPredictions = async () => {
   return response.data.predictions;
 };
 
+export const getUpcomingMatches = async (limit?: number) => {
+  const response = await api.get<{ matches: Match[] }>('/upcoming-matches', {
+    params: { limit }
+  });
+  return response.data.matches;
+};
+
 // Statistics
 export const getCompetitions = async () => {
   const response = await api.get<{ competitions: string[] }>('/statistics/competitions');
