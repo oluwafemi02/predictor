@@ -86,14 +86,17 @@ def create_app(config_name=None):
             except Exception as e:
                 print(f"Warning: Could not create database tables: {e}")
     
-    # Initialize scheduler if enabled
-    if app.config.get('ENABLE_SCHEDULER', False):
+    # Initialize scheduler if enabled and this is the scheduler instance
+    # For Render: Set ENABLE_SCHEDULER=true and IS_SCHEDULER_INSTANCE=true on only one service
+    if app.config.get('ENABLE_SCHEDULER', False) and os.environ.get('IS_SCHEDULER_INSTANCE', 'false').lower() == 'true':
         from scheduler import data_scheduler
         data_scheduler.init_app(app)
         data_scheduler.start()
         
         # Register cleanup on app shutdown
         atexit.register(lambda: data_scheduler.shutdown())
+    elif app.config.get('ENABLE_SCHEDULER', False):
+        print("Scheduler is enabled but this is not the scheduler instance (IS_SCHEDULER_INSTANCE != true)")
     
     @app.route('/')
     def index():
