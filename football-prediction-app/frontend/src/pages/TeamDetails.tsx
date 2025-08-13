@@ -109,7 +109,21 @@ const TeamDetails: React.FC = () => {
   }
 
   const { team } = teamData;
-  const statistics = statsData?.statistics || {};
+  const statistics = statsData?.statistics || {
+    position: undefined,
+    points: undefined,
+    season: '',
+    matches_played: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    goals_for: 0,
+    goals_against: 0,
+    form: '',
+    clean_sheets: 0,
+    home_record: { wins: 0, draws: 0, losses: 0 },
+    away_record: { wins: 0, draws: 0, losses: 0 }
+  };
 
   return (
     <Box>
