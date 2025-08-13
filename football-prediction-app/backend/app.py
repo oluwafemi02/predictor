@@ -4,7 +4,7 @@ from flask_cors import CORS
 from models import db
 from config import config
 from api_routes import api_bp
-from real_data_routes import real_data_bp
+# from real_data_routes import real_data_bp  # Temporarily disabled
 
 def create_app(config_name=None):
     if config_name is None:
@@ -19,7 +19,7 @@ def create_app(config_name=None):
     
     # Register blueprints
     app.register_blueprint(api_bp)
-    app.register_blueprint(real_data_bp)
+    # app.register_blueprint(real_data_bp)  # Temporarily disabled
     
     # Create database tables only if not in production or if explicitly requested
     # In production, we'll handle this separately to avoid startup issues
@@ -49,9 +49,12 @@ def create_app(config_name=None):
                     'sync_league': '/api/v1/odds/sync/league/<league_id>',
                     'sync_match': '/api/v1/odds/sync/match/<match_id>'
                 },
-                'data': {
-                    'fetch_and_train': '/api/v1/data/fetch-and-train',
-                    'stats': '/api/v1/data/stats'
+                'core': {
+                    'matches': '/api/v1/matches',
+                    'teams': '/api/v1/teams',
+                    'predictions': '/api/v1/predictions',
+                    'model_status': '/api/v1/model/status',
+                    'model_train': '/api/v1/model/train'
                 }
             }
         }
