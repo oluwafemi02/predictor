@@ -5,11 +5,13 @@ import logging
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.jobstores.base import ConflictingIdError
 from flask import Flask
 from models import db
 from data_collector import FootballDataCollector
 import requests
 import json
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ class DataScheduler:
         self.scheduler = BackgroundScheduler()
         self.app = app
         self.data_collector = FootballDataCollector()
+        self._started = False
         
     def init_app(self, app: Flask):
         """Initialize scheduler with Flask app context"""
@@ -159,60 +162,101 @@ class DataScheduler:
     def start(self):
         """Start the scheduler with configured jobs"""
         
-        # Fetch historical data once on startup and then weekly
-        self.scheduler.add_job(
-            func=self.fetch_historical_data,
-            trigger="interval",
-            weeks=1,
-            id='fetch_historical_data',
-            name='Fetch historical match data',
-            replace_existing=True
-        )
+        # Prevent multiple starts
+        if self._started:
+            logger.info("Scheduler already started, skipping...")
+            return
+            
+        # Check if scheduler is already running
+        if self.scheduler.running:
+            logger.info("Scheduler is already running")
+            return
         
-        # Fetch upcoming matches twice daily (morning and evening)
-        self.scheduler.add_job(
-            func=self.fetch_upcoming_matches,
-            trigger=CronTrigger(hour='9,18'),  # 9 AM and 6 PM
-            id='fetch_upcoming_matches',
-            name='Fetch upcoming matches',
-            replace_existing=True
-        )
-        
-        # Update match results every hour
-        self.scheduler.add_job(
-            func=self.update_match_results,
-            trigger="interval",
-            hours=1,
-            id='update_match_results',
-            name='Update match results',
-            replace_existing=True
-        )
-        
-        # Train model weekly on Sunday night
-        self.scheduler.add_job(
-            func=self.train_model,
-            trigger=CronTrigger(day_of_week='sun', hour=23),
-            id='train_model',
-            name='Train prediction model',
-            replace_existing=True
-        )
-        
-        # Run initial data fetch after 10 seconds
-        self.scheduler.add_job(
-            func=self.fetch_historical_data,
-            trigger="date",
-            run_date=datetime.now() + timedelta(seconds=10),
-            id='initial_fetch',
-            name='Initial data fetch'
-        )
-        
-        self.scheduler.start()
-        logger.info("Scheduler started with all jobs configured")
+        try:
+            # Clear any existing jobs to avoid conflicts
+            if self.scheduler.get_jobs():
+                self.scheduler.remove_all_jobs()
+                logger.info("Cleared existing jobs")
+            
+            # Fetch historical data once on startup and then weekly
+            try:
+                self.scheduler.add_job(
+                    func=self.fetch_historical_data,
+                    trigger="interval",
+                    weeks=1,
+                    id='fetch_historical_data',
+                    name='Fetch historical match data',
+                    replace_existing=True
+                )
+            except ConflictingIdError:
+                logger.warning("Job 'fetch_historical_data' already exists")
+            
+            # Fetch upcoming matches twice daily (morning and evening)
+            try:
+                self.scheduler.add_job(
+                    func=self.fetch_upcoming_matches,
+                    trigger=CronTrigger(hour='9,18'),  # 9 AM and 6 PM
+                    id='fetch_upcoming_matches',
+                    name='Fetch upcoming matches',
+                    replace_existing=True
+                )
+            except ConflictingIdError:
+                logger.warning("Job 'fetch_upcoming_matches' already exists")
+            
+            # Update match results every hour
+            try:
+                self.scheduler.add_job(
+                    func=self.update_match_results,
+                    trigger="interval",
+                    hours=1,
+                    id='update_match_results',
+                    name='Update match results',
+                    replace_existing=True
+                )
+            except ConflictingIdError:
+                logger.warning("Job 'update_match_results' already exists")
+            
+            # Train model weekly on Sunday night
+            try:
+                self.scheduler.add_job(
+                    func=self.train_model,
+                    trigger=CronTrigger(day_of_week='sun', hour=23),
+                    id='train_model',
+                    name='Train prediction model',
+                    replace_existing=True
+                )
+            except ConflictingIdError:
+                logger.warning("Job 'train_model' already exists")
+            
+            # Run initial data fetch after 60 seconds (increased delay for Render)
+            try:
+                self.scheduler.add_job(
+                    func=self.fetch_historical_data,
+                    trigger="date",
+                    run_date=datetime.now() + timedelta(seconds=60),
+                    id='initial_fetch',
+                    name='Initial data fetch',
+                    replace_existing=True
+                )
+            except ConflictingIdError:
+                logger.warning("Job 'initial_fetch' already exists")
+            
+            self.scheduler.start()
+            self._started = True
+            logger.info("Scheduler started with all jobs configured")
+            
+        except Exception as e:
+            logger.error(f"Error starting scheduler: {str(e)}")
+            # If scheduler fails to start, ensure we clean up
+            if self.scheduler.running:
+                self.scheduler.shutdown(wait=False)
+            self._started = False
     
     def shutdown(self):
         """Shutdown the scheduler"""
         if self.scheduler.running:
             self.scheduler.shutdown()
+            self._started = False
             logger.info("Scheduler shut down")
 
 # Global scheduler instance
