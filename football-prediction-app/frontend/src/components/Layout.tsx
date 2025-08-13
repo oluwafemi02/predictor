@@ -59,7 +59,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <>
       <Toolbar>
         <Typography variant="h6" noWrap component="div" sx={{ display: 'flex', alignItems: 'center' }}>
-          <SoccerIcon sx={{ mr: 1 }} />
+          <SoccerIcon sx={{ 
+            mr: 1, 
+            fontSize: '1.5rem',
+            color: theme.palette.primary.main,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+          }} />
           Football Predictor
         </Typography>
       </Toolbar>
@@ -111,9 +116,24 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            {menuItems.find((item) => item.path === location.pathname)?.text || 'Football Predictions'}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+            <SoccerIcon sx={{ 
+              mr: 2, 
+              fontSize: '2rem',
+              color: theme.palette.primary.main,
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+              '@keyframes spin': {
+                '0%': { transform: 'rotate(0deg)' },
+                '100%': { transform: 'rotate(360deg)' }
+              },
+              '&:hover': {
+                animation: 'spin 1s ease-in-out'
+              }
+            }} />
+            <Typography variant="h6" noWrap component="div">
+              {menuItems.find((item) => item.path === location.pathname)?.text || 'Football Predictions'}
+            </Typography>
+          </Box>
         </Toolbar>
       </AppBar>
       <Box
