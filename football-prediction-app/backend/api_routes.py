@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from models import db, Match, MatchOdds, Team
-from data_collector import RapidAPIFootballOddsCollector
+from data_collector import RapidAPIFootballOddsCollector, FootballDataCollector
 from datetime import datetime, timedelta
 import os
 
@@ -202,12 +202,54 @@ def get_model_status():
 def train_model():
     """Train the prediction model"""
     try:
-        # Mock training process
-        # In production, this should actually train your ML model
+        # First check if we have enough data
+        match_count = Match.query.count()
+        
+        if match_count < 50:
+            # Try to fetch some data first
+            collector = FootballDataCollector()
+            
+            # Check if we have API key
+            if not collector.api_key:
+                # Use RapidAPI instead
+                return jsonify({
+                    'status': 'info',
+                    'message': 'No football-data.org API key found. Please set FOOTBALL_API_KEY environment variable or use RapidAPI data.',
+                    'hint': 'You can fetch data using /api/v1/data/fetch-and-train endpoint first'
+                })
+            
+            return jsonify({
+                'status': 'error',
+                'message': f'Insufficient data for training. Only {match_count} matches found. Need at least 50.',
+                'hint': 'Use /api/v1/data/fetch-and-train to sync match data first'
+            })
+        
+        # Import and use the prediction model
+        from prediction_model import FootballPredictor
+        
+        predictor = FootballPredictor()
+        result = predictor.train_model()
+        
+        if result['success']:
+            return jsonify({
+                'status': 'success',
+                'message': 'Model trained successfully',
+                'accuracy': result.get('accuracy', 0),
+                'features_used': result.get('features', []),
+                'training_samples': result.get('samples', 0)
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result.get('error', 'Failed to train model')
+            }), 500
+            
+    except ImportError:
         return jsonify({
-            'message': 'Model training initiated. This feature is currently in development.',
-            'status': 'success'
-        })
+            'status': 'error',
+            'message': 'Prediction model module not properly configured',
+            'hint': 'Check if all required ML libraries are installed'
+        }), 500
     except Exception as e:
         return jsonify({
             'status': 'error',
