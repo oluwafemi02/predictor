@@ -138,8 +138,14 @@ class DataScheduler:
             try:
                 logger.info("Starting automated model training...")
                 
+                # Determine the API URL based on environment
+                if self.app.config.get('ENV') == 'production':
+                    api_url = 'https://football-prediction-backend-2cvi.onrender.com/api/v1/model/train'
+                else:
+                    api_url = 'http://localhost:5000/api/v1/model/train'
+                
                 # Call the train model endpoint
-                response = requests.post('http://localhost:5000/api/v1/model/train')
+                response = requests.post(api_url)
                 
                 if response.status_code == 200:
                     result = response.json()

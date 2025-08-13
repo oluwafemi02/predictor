@@ -72,7 +72,7 @@ python manage.py run-scheduler
 
 Check scheduler status:
 ```bash
-curl http://localhost:5000/api/v1/scheduler/status
+curl https://football-prediction-backend-2cvi.onrender.com/api/v1/scheduler/status
 ```
 
 ## PowerShell Commands for Windows
@@ -81,20 +81,20 @@ curl http://localhost:5000/api/v1/scheduler/status
 
 ```powershell
 # Using PowerShell's Invoke-WebRequest
-Invoke-WebRequest -Uri "http://localhost:5000/api/v1/model/train" -Method POST -Headers @{"Content-Type"="application/json"} | Select-Object -ExpandProperty Content | ConvertFrom-Json
+Invoke-WebRequest -Uri "https://football-prediction-backend-2cvi.onrender.com/api/v1/model/train" -Method POST -Headers @{"Content-Type"="application/json"} | Select-Object -ExpandProperty Content | ConvertFrom-Json
 
 # Using curl.exe (if installed)
-curl.exe -X POST "http://localhost:5000/api/v1/model/train" -H "Content-Type: application/json"
+curl.exe -X POST "https://football-prediction-backend-2cvi.onrender.com/api/v1/model/train" -H "Content-Type: application/json"
 ```
 
 ### Check Scheduler Status
 
 ```powershell
 # Using PowerShell
-Invoke-WebRequest -Uri "http://localhost:5000/api/v1/scheduler/status" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json
+Invoke-WebRequest -Uri "https://football-prediction-backend-2cvi.onrender.com/api/v1/scheduler/status" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json
 
 # Using curl.exe
-curl.exe "http://localhost:5000/api/v1/scheduler/status"
+curl.exe "https://football-prediction-backend-2cvi.onrender.com/api/v1/scheduler/status"
 ```
 
 ## Running the Scheduler
@@ -126,6 +126,10 @@ This keeps the scheduler isolated from the main web server.
 2. **Database**: Scheduler requires database access - ensure PostgreSQL is running
 3. **Rate Limits**: The football-data.org API has rate limits. The scheduler is configured to respect these
 4. **Costs**: Automated API calls may increase your API usage costs
+5. **Production URLs**: The application is deployed at:
+   - Frontend: https://football-prediction-frontend-2cvi.onrender.com
+   - Backend: https://football-prediction-backend-2cvi.onrender.com
+6. **Render.com Deployment**: The scheduler needs to be enabled in the Render.com environment variables
 
 ## Troubleshooting
 
