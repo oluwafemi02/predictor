@@ -3,16 +3,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
-    
-    # Database configuration - handle both postgres:// and postgresql://
+# Helper function to get database URL
+def get_database_url():
     database_url = os.environ.get('DATABASE_URL')
     if database_url and database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    return database_url
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
     
-    # Use SQLite if no database URL is provided (for development or when DB is not ready)
-    SQLALCHEMY_DATABASE_URI = database_url or 'sqlite:///football_predictions.db'
+    # Database configuration
+    SQLALCHEMY_DATABASE_URI = get_database_url() or 'sqlite:///football_predictions.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # API Configuration
@@ -55,23 +57,14 @@ class DevelopmentConfig(Config):
     
 class ProductionConfig(Config):
     DEBUG = False
-    # In production, we'll handle database initialization separately
-    # to avoid startup issues when database is not ready
     
-    # For production, allow fallback to SQLite temporarily
-    # This lets the app start even if PostgreSQL isn't ready
-    @property
-    def SQLALCHEMY_DATABASE_URI(self):
-        database_url = os.environ.get('DATABASE_URL')
-        if database_url and database_url.startswith('postgres://'):
-            database_url = database_url.replace('postgres://', 'postgresql://', 1)
-        
-        # If no database URL, use SQLite temporarily
-        if not database_url:
-            print("Warning: No DATABASE_URL found, using SQLite temporarily")
-            return 'sqlite:///football_predictions_temp.db'
-        
-        return database_url
+    # For production, use database URL or fall back to SQLite with warning
+    SQLALCHEMY_DATABASE_URI = get_database_url() or 'sqlite:///football_predictions_temp.db'
+    
+    # Ensure we have a secret key in production
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ValueError("No SECRET_KEY set for production!")
 
 config = {
     'development': DevelopmentConfig,
