@@ -4,6 +4,8 @@ from data_collector import RapidAPIFootballOddsCollector, FootballDataCollector
 from datetime import datetime, timedelta
 import os
 import logging
+import requests
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -770,5 +772,157 @@ def initialize_historical_data():
         return jsonify({
             'status': 'error',
             'message': 'Failed to initialize historical data',
+            'error': str(e)
+        })
+
+@api_bp.route('/data/initialize-season', methods=['POST'])
+def initialize_season_data():
+    """Initialize data for the 2024/2025 season and previous season"""
+    try:
+        from config import Config
+        api_key = Config.FOOTBALL_API_KEY
+        
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'FOOTBALL_API_KEY not configured'
+            })
+        
+        collector = FootballDataCollector()
+        
+        # Premier League ID
+        competition_id = 2021
+        results = {
+            'teams': {'synced': 0, 'error': None},
+            'last_season': {'synced': 0, 'error': None},
+            'upcoming': {'synced': 0, 'error': None}
+        }
+        
+        # Ensure we have teams
+        team_count = Team.query.count()
+        if team_count == 0:
+            try:
+                teams_result = collector.sync_teams(competition_id)
+                results['teams'] = teams_result
+            except Exception as e:
+                results['teams']['error'] = str(e)
+        else:
+            results['teams']['synced'] = team_count
+        
+        # Get last season matches (2023/2024)
+        try:
+            # Use the sync_matches method with just competition_id
+            # It will fetch recent matches automatically
+            matches_result = collector.sync_matches(competition_id)
+            results['last_season'] = matches_result
+        except Exception as e:
+            results['last_season']['error'] = str(e)
+            logger.error(f"Error syncing last season: {e}")
+        
+        # Try to get any scheduled matches for upcoming season
+        try:
+            # Fetch matches manually for upcoming dates
+            params = {
+                'dateFrom': datetime.now().strftime('%Y-%m-%d'),
+                'dateTo': (datetime.now() + timedelta(days=60)).strftime('%Y-%m-%d')
+            }
+            
+            response = requests.get(
+                f"{collector.base_url}competitions/{competition_id}/matches",
+                headers=collector.headers,
+                params=params
+            )
+            
+            if response.status_code == 200:
+                matches_data = response.json().get('matches', [])
+                results['upcoming']['found'] = len(matches_data)
+                results['upcoming']['sample'] = matches_data[:3] if matches_data else []
+            else:
+                results['upcoming']['error'] = f"API returned {response.status_code}"
+                
+        except Exception as e:
+            results['upcoming']['error'] = str(e)
+        
+        # Get current counts
+        team_count = Team.query.count()
+        match_count = Match.query.count()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Season data check completed',
+            'results': results,
+            'database_stats': {
+                'total_teams': team_count,
+                'total_matches': match_count,
+                'ready_for_training': match_count >= 50
+            },
+            'note': 'Premier League 2024/2025 season starts soon. Using historical data for training.'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in initialize_season_data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to initialize season data',
+            'error': str(e)
+        })
+
+@api_bp.route('/data/use-sample-data', methods=['POST'])
+def use_sample_data():
+    """Create sample match data for demonstration purposes"""
+    try:
+        # Check if we have teams
+        teams = Team.query.all()
+        
+        if len(teams) < 4:
+            return jsonify({
+                'status': 'error',
+                'message': 'Need at least 4 teams. Run /api/v1/data/initialize first.'
+            })
+        
+        # Create sample matches between teams
+        matches_created = 0
+        
+        # Create matches for the last 3 months
+        for days_ago in range(0, 90, 3):  # Every 3 days
+            date = datetime.now() - timedelta(days=days_ago)
+            
+            # Create 2 matches for each date
+            for i in range(0, min(len(teams)-1, 10), 2):
+                if i+1 < len(teams):
+                    match = Match(
+                        home_team_id=teams[i].id,
+                        away_team_id=teams[i+1].id,
+                        competition='Premier League',
+                        season='2023/2024',
+                        match_date=date,
+                        status='finished',
+                        home_score=random.randint(0, 4),
+                        away_score=random.randint(0, 4),
+                        venue=teams[i].stadium or 'Unknown Stadium'
+                    )
+                    db.session.add(match)
+                    matches_created += 1
+        
+        db.session.commit()
+        
+        # Get updated counts
+        match_count = Match.query.count()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Created {matches_created} sample matches',
+            'database_stats': {
+                'total_matches': match_count,
+                'ready_for_training': match_count >= 50
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating sample data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to create sample data',
             'error': str(e)
         })
