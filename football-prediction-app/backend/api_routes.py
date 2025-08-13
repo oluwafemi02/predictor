@@ -124,44 +124,73 @@ def get_matches():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         
-        # For now, return mock data since we don't have a proper matches table
-        # In production, this should query your matches database
-        matches = []
+        # Build query
+        query = Match.query
         
         if status == 'finished':
-            # Return some mock finished matches
-            matches = [
-                {
-                    'id': 1,
-                    'date': '2024-01-10T15:00:00',
-                    'home_team': {'id': 1, 'name': 'Team A', 'logo_url': ''},
-                    'away_team': {'id': 2, 'name': 'Team B', 'logo_url': ''},
-                    'home_score': 2,
-                    'away_score': 1,
-                    'status': 'finished',
-                    'competition': 'League 1',
-                    'venue': 'Stadium A',
-                    'has_prediction': True
-                }
-            ]
+            query = query.filter(
+                Match.status == 'finished',
+                Match.home_score.isnot(None),
+                Match.away_score.isnot(None)
+            )
+        elif status == 'scheduled':
+            query = query.filter(
+                (Match.status != 'finished') | 
+                (Match.home_score.is_(None))
+            )
         
-        total = len(matches)
-        pages = (total + per_page - 1) // per_page
+        # Order by date descending
+        query = query.order_by(Match.match_date.desc())
+        
+        # Paginate
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Format matches
+        matches = []
+        for match in paginated.items:
+            matches.append({
+                'id': match.id,
+                'date': match.match_date.isoformat() if match.match_date else None,
+                'home_team': {
+                    'id': match.home_team_id,
+                    'name': match.home_team.name if match.home_team else 'Unknown',
+                    'logo_url': match.home_team.logo_url if match.home_team else ''
+                },
+                'away_team': {
+                    'id': match.away_team_id,
+                    'name': match.away_team.name if match.away_team else 'Unknown',
+                    'logo_url': match.away_team.logo_url if match.away_team else ''
+                },
+                'home_score': match.home_score,
+                'away_score': match.away_score,
+                'status': match.status,
+                'competition': match.competition,
+                'venue': match.venue,
+                'has_prediction': False  # Would check if prediction exists
+            })
         
         return jsonify({
             'matches': matches,
             'pagination': {
                 'page': page,
-                'pages': pages,
-                'total': total,
+                'pages': paginated.pages,
+                'total': paginated.total,
                 'per_page': per_page
             }
         })
     except Exception as e:
+        logger.error(f"Error in get_matches: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
-        }), 500
+            'message': str(e),
+            'matches': [],
+            'pagination': {
+                'page': 1,
+                'pages': 0,
+                'total': 0,
+                'per_page': per_page
+            }
+        })
 
 @api_bp.route('/upcoming-predictions', methods=['GET'])
 def get_upcoming_predictions():
@@ -1008,5 +1037,182 @@ def use_sample_data():
         return jsonify({
             'status': 'error',
             'message': 'Failed to create sample data',
+            'error': str(e)
+        })
+
+@api_bp.route('/data/fetch-historical-seasons', methods=['POST'])
+def fetch_historical_seasons():
+    """Fetch historical data from multiple Premier League seasons"""
+    try:
+        from config import Config
+        api_key = Config.FOOTBALL_API_KEY
+        
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'FOOTBALL_API_KEY not configured'
+            })
+        
+        collector = FootballDataCollector()
+        
+        # Premier League ID
+        competition_id = 2021
+        
+        # Seasons to fetch (football-data.org format)
+        seasons = [2023, 2022, 2021, 2020, 2019]  # Last 5 seasons
+        
+        results = {
+            'teams_synced': 0,
+            'matches_by_season': {},
+            'total_matches_synced': 0,
+            'errors': []
+        }
+        
+        # First ensure we have teams
+        try:
+            if Team.query.count() == 0:
+                teams_result = collector.sync_teams(competition_id)
+                results['teams_synced'] = teams_result.get('synced', 0)
+        except Exception as e:
+            results['errors'].append(f"Teams sync error: {str(e)}")
+        
+        # Fetch matches for each season
+        for year in seasons:
+            try:
+                # Make direct API call with season parameter
+                response = requests.get(
+                    f"{collector.base_url}competitions/{competition_id}/matches",
+                    headers=collector.headers,
+                    params={'season': year}
+                )
+                
+                if response.status_code == 200:
+                    matches_data = response.json().get('matches', [])
+                    
+                    # Filter for finished matches only
+                    finished_matches = [m for m in matches_data if m.get('status') == 'FINISHED']
+                    
+                    # Store matches in database
+                    synced = 0
+                    for match_data in finished_matches:
+                        try:
+                            # Check if match already exists
+                            existing = Match.query.filter_by(
+                                api_id=match_data.get('id')
+                            ).first()
+                            
+                            if not existing:
+                                # Get team IDs
+                                home_team = Team.query.filter_by(
+                                    api_id=match_data['homeTeam']['id']
+                                ).first()
+                                away_team = Team.query.filter_by(
+                                    api_id=match_data['awayTeam']['id']
+                                ).first()
+                                
+                                if home_team and away_team:
+                                    match = Match(
+                                        api_id=match_data.get('id'),
+                                        home_team_id=home_team.id,
+                                        away_team_id=away_team.id,
+                                        competition='Premier League',
+                                        season=f"{year}/{year+1}",
+                                        match_date=datetime.fromisoformat(match_data['utcDate'].replace('Z', '+00:00')),
+                                        status='finished',
+                                        home_score=match_data['score']['fullTime']['home'],
+                                        away_score=match_data['score']['fullTime']['away'],
+                                        home_score_halftime=match_data['score']['halfTime']['home'],
+                                        away_score_halftime=match_data['score']['halfTime']['away'],
+                                        venue=home_team.stadium
+                                    )
+                                    db.session.add(match)
+                                    synced += 1
+                        except Exception as e:
+                            logger.error(f"Error saving match: {e}")
+                    
+                    db.session.commit()
+                    
+                    results['matches_by_season'][f"{year}/{year+1}"] = {
+                        'total': len(matches_data),
+                        'finished': len(finished_matches),
+                        'synced': synced
+                    }
+                    results['total_matches_synced'] += synced
+                    
+                else:
+                    results['errors'].append(f"Season {year}: API returned {response.status_code}")
+                    
+            except Exception as e:
+                results['errors'].append(f"Season {year}: {str(e)}")
+                logger.error(f"Error fetching season {year}: {e}")
+        
+        # Get final counts
+        total_matches = Match.query.count()
+        finished_matches = Match.query.filter(
+            Match.status == 'finished',
+            Match.home_score.isnot(None)
+        ).count()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Fetched historical data from {len(seasons)} seasons',
+            'results': results,
+            'database_stats': {
+                'total_matches': total_matches,
+                'finished_matches': finished_matches,
+                'ready_for_training': finished_matches >= 50
+            },
+            'note': 'Now you can train the model with real historical data!'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in fetch_historical_seasons: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to fetch historical data',
+            'error': str(e)
+        })
+
+@api_bp.route('/data/clear-future-matches', methods=['POST'])
+def clear_future_matches():
+    """Clear future/timed matches to focus on historical data"""
+    try:
+        # Delete matches that don't have scores
+        future_matches = Match.query.filter(
+            (Match.status != 'finished') | 
+            (Match.home_score.is_(None)) |
+            (Match.away_score.is_(None))
+        ).all()
+        
+        count = len(future_matches)
+        
+        for match in future_matches:
+            db.session.delete(match)
+        
+        db.session.commit()
+        
+        # Get remaining counts
+        total_matches = Match.query.count()
+        finished_matches = Match.query.filter(
+            Match.status == 'finished',
+            Match.home_score.isnot(None)
+        ).count()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Cleared {count} future/incomplete matches',
+            'remaining_matches': {
+                'total': total_matches,
+                'finished': finished_matches,
+                'ready_for_training': finished_matches >= 50
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error clearing future matches: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to clear matches',
             'error': str(e)
         })
