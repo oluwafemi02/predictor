@@ -218,13 +218,25 @@ def train_model():
             })
         
         if match_count < 50:
+            # Get team count too
+            team_count = 0
+            try:
+                team_count = Team.query.count()
+            except:
+                pass
+                
             return jsonify({
                 'status': 'info',
                 'message': f'Need more data for training. Currently have {match_count} matches, need at least 50.',
-                'hint': 'Visit the RapidAPI website to fetch odds data, or set FOOTBALL_API_KEY for football-data.org',
-                'data_sources': {
-                    'rapidapi': 'https://rapidapi.com/api-sports/api/api-football/',
-                    'football_data': 'https://www.football-data.org/'
+                'current_data': {
+                    'teams': team_count,
+                    'matches': match_count
+                },
+                'hint': 'Try the /api/v1/data/initialize-historical endpoint to fetch more matches',
+                'endpoints': {
+                    'initialize': '/api/v1/data/initialize',
+                    'initialize_historical': '/api/v1/data/initialize-historical',
+                    'stats': '/api/v1/data/stats'
                 }
             })
         
@@ -665,4 +677,98 @@ def init_database():
             'message': 'Failed to initialize database',
             'error': str(e),
             'hint': 'Check if DATABASE_URL is properly configured in Render'
+        })
+
+@api_bp.route('/data/initialize-historical', methods=['POST'])
+def initialize_historical_data():
+    """Initialize the database with historical football data (last 90 days)"""
+    try:
+        # Check if we have the Football API key
+        from config import Config
+        api_key = Config.FOOTBALL_API_KEY
+        
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'FOOTBALL_API_KEY not configured',
+                'hint': 'Please set the FOOTBALL_API_KEY environment variable in Render'
+            })
+        
+        # Try to fetch Premier League data
+        collector = FootballDataCollector()
+        
+        # Premier League ID is 2021
+        competition_id = 2021
+        results = {
+            'teams': {'synced': 0, 'error': None},
+            'matches': {'synced': 0, 'error': None},
+            'historical_matches': {'synced': 0, 'error': None}
+        }
+        
+        # Get current team count
+        team_count = Team.query.count()
+        if team_count == 0:
+            # Sync teams first
+            try:
+                teams_result = collector.sync_teams(competition_id)
+                results['teams'] = teams_result
+            except Exception as e:
+                results['teams']['error'] = str(e)
+                logger.error(f"Error syncing teams: {e}")
+        else:
+            results['teams']['synced'] = team_count
+        
+        # Sync matches from last 90 days
+        try:
+            date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+            date_to = datetime.now().strftime('%Y-%m-%d')
+            matches_result = collector.sync_matches(competition_id, date_from, date_to)
+            results['matches'] = matches_result
+        except Exception as e:
+            results['matches']['error'] = str(e)
+            logger.error(f"Error syncing recent matches: {e}")
+        
+        # Also try to get matches from the current season
+        try:
+            # 2023/2024 season started in August 2023
+            season_start = '2023-08-01'
+            season_end = '2024-05-31'
+            historical_result = collector.sync_matches(competition_id, season_start, season_end)
+            results['historical_matches'] = historical_result
+        except Exception as e:
+            results['historical_matches']['error'] = str(e)
+            logger.error(f"Error syncing historical matches: {e}")
+        
+        # Get current counts
+        team_count = Team.query.count()
+        match_count = Match.query.count()
+        
+        # Get some sample matches
+        sample_matches = Match.query.limit(5).all()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Historical data initialization completed',
+            'results': results,
+            'database_stats': {
+                'total_teams': team_count,
+                'total_matches': match_count,
+                'ready_for_training': match_count >= 50,
+                'sample_matches': [
+                    {
+                        'date': m.match_date.isoformat() if m.match_date else None,
+                        'home': m.home_team.name if m.home_team else 'Unknown',
+                        'away': m.away_team.name if m.away_team else 'Unknown',
+                        'status': m.status
+                    } for m in sample_matches
+                ]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in initialize_historical_data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to initialize historical data',
+            'error': str(e)
         })
