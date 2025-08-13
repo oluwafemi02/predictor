@@ -26,6 +26,7 @@ import {
   TableChart as TableIcon,
   Settings as SettingsIcon,
   TrendingUp as PredictionIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
@@ -39,6 +40,7 @@ const menuItems = [
   { text: 'Predictions', icon: <PredictionIcon />, path: '/predictions' },
   { text: 'Matches', icon: <SoccerIcon />, path: '/matches' },
   { text: 'Teams', icon: <TeamIcon />, path: '/teams' },
+  { text: 'Players', icon: <PersonIcon />, path: '/players' },
   { text: 'League Table', icon: <TableIcon />, path: '/league-table' },
   { text: 'Model Status', icon: <SettingsIcon />, path: '/model-status' },
 ];

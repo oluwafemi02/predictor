@@ -16,6 +16,7 @@ import Matches from './pages/Matches';
 import MatchDetails from './pages/MatchDetails';
 import Teams from './pages/Teams';
 import TeamDetails from './pages/TeamDetails';
+import Players from './pages/Players';
 import LeagueTable from './pages/LeagueTable';
 import ModelStatus from './pages/ModelStatus';
 
@@ -86,6 +87,7 @@ function App() {
                 <Route path="/matches/:matchId" element={<MatchDetails />} />
                 <Route path="/teams" element={<Teams />} />
                 <Route path="/teams/:teamId" element={<TeamDetails />} />
+                <Route path="/players" element={<Players />} />
                 <Route path="/league-table" element={<LeagueTable />} />
                 <Route path="/model-status" element={<ModelStatus />} />
               </Routes>
