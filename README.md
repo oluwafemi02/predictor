@@ -254,3 +254,7 @@ For issues and questions:
 ---
 
 **Note**: This app is for educational and entertainment purposes. Always gamble responsibly if using predictions for betting.
+
+---
+
+**Last Updated**: December 2024 - Added smooth transitions and improved scrollbar styling for better user experience.
