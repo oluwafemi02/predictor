@@ -1,9 +1,10 @@
 import os
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from models import db
 from config import config
 from api_routes import api_bp
+from exceptions import FootballAPIError, ValidationError, APIKeyError
 
 def create_app(config_name=None):
     if config_name is None:
@@ -25,6 +26,50 @@ def create_app(config_name=None):
         app.register_blueprint(real_data_bp)
     except ImportError:
         print("Warning: real_data_routes not available")
+    
+    # Error handlers
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(error):
+        response = {
+            'status': 'error',
+            'message': error.message,
+            'type': 'validation_error'
+        }
+        if error.field:
+            response['field'] = error.field
+        return jsonify(response), error.status_code
+    
+    @app.errorhandler(APIKeyError)
+    def handle_api_key_error(error):
+        return jsonify({
+            'status': 'error',
+            'message': error.message,
+            'type': 'api_key_error'
+        }), error.status_code
+    
+    @app.errorhandler(FootballAPIError)
+    def handle_football_api_error(error):
+        return jsonify({
+            'status': 'error',
+            'message': error.message,
+            'type': 'api_error'
+        }), error.status_code
+    
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        return jsonify({
+            'status': 'error',
+            'message': 'Resource not found',
+            'type': 'not_found_error'
+        }), 404
+    
+    @app.errorhandler(500)
+    def handle_internal_error(error):
+        return jsonify({
+            'status': 'error',
+            'message': 'Internal server error',
+            'type': 'internal_error'
+        }), 500
     
     # Create database tables only if not in production or if explicitly requested
     # In production, we'll handle this separately to avoid startup issues
