@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from models import db, Match, MatchOdds, Team
+from models import db, Match, MatchOdds, Team, Player, PlayerPerformance, TeamStatistics
 from data_collector import RapidAPIFootballOddsCollector, FootballDataCollector
 from datetime import datetime, timedelta
 import os
@@ -977,6 +977,23 @@ def get_league_table():
         table = []
         for position, team_stats in enumerate(sorted_standings, 1):
             if team_stats['played'] > 0:  # Only show teams that have played
+                # Calculate additional stats
+                home_played = Match.query.filter(
+                    Match.home_team_id == team_stats['team'].id,
+                    Match.competition == competition,
+                    Match.season == season,
+                    Match.status == 'finished',
+                    Match.home_score.isnot(None)
+                ).count()
+                
+                away_played = Match.query.filter(
+                    Match.away_team_id == team_stats['team'].id,
+                    Match.competition == competition,
+                    Match.season == season,
+                    Match.status == 'finished',
+                    Match.home_score.isnot(None)
+                ).count()
+                
                 table.append({
                     'position': position,
                     'team': {
@@ -992,7 +1009,13 @@ def get_league_table():
                     'goals_against': team_stats['goals_against'],
                     'goal_difference': team_stats['goal_difference'],
                     'points': team_stats['points'],
-                    'form': team_stats['form']
+                    'form': team_stats['form'],
+                    'home_record': f"{home_played}P",
+                    'away_record': f"{away_played}P",
+                    'points_per_game': round(team_stats['points'] / max(1, team_stats['played']), 2),
+                    'win_percentage': round((team_stats['won'] / max(1, team_stats['played'])) * 100, 1),
+                    'clean_sheets': 0,  # Add calculation if needed
+                    'failed_to_score': 0  # Add calculation if needed
                 })
         
         # Get available seasons
@@ -1942,6 +1965,147 @@ def clear_future_matches():
             'error': str(e)
         })
 
+@api_bp.route('/players/<int:player_id>/stats', methods=['GET'])
+def get_player_stats(player_id):
+    """Get detailed player statistics"""
+    try:
+        player = Player.query.get(player_id)
+        if not player:
+            return jsonify({'error': 'Player not found'}), 404
+        
+        # Get current season stats
+        current_season = request.args.get('season', '2023/2024')
+        
+        # Get player performances
+        performances = PlayerPerformance.query.filter_by(
+            player_id=player_id
+        ).join(Match).filter(
+            Match.season == current_season
+        ).all()
+        
+        # Calculate aggregated stats
+        total_matches = len(performances)
+        total_goals = sum(p.goals for p in performances)
+        total_assists = sum(p.assists for p in performances)
+        total_minutes = sum(p.minutes_played for p in performances if p.minutes_played)
+        avg_rating = sum(p.rating for p in performances if p.rating) / max(1, len([p for p in performances if p.rating]))
+        
+        # Get recent form (last 5 matches)
+        recent_performances = PlayerPerformance.query.filter_by(
+            player_id=player_id
+        ).join(Match).order_by(Match.match_date.desc()).limit(5).all()
+        
+        recent_form = []
+        for perf in recent_performances:
+            match = Match.query.get(perf.match_id)
+            recent_form.append({
+                'match_date': match.match_date.isoformat() if match.match_date else None,
+                'opponent': match.away_team.name if match.home_team_id == player.team_id else match.home_team.name,
+                'goals': perf.goals,
+                'assists': perf.assists,
+                'rating': perf.rating,
+                'minutes': perf.minutes_played
+            })
+        
+        return jsonify({
+            'player': {
+                'id': player.id,
+                'name': player.name,
+                'position': player.position,
+                'jersey_number': player.jersey_number,
+                'age': player.age,
+                'nationality': player.nationality,
+                'height': player.height,
+                'weight': player.weight,
+                'photo_url': player.photo_url,
+                'team': {
+                    'id': player.team.id,
+                    'name': player.team.name
+                } if player.team else None
+            },
+            'season_stats': {
+                'season': current_season,
+                'appearances': total_matches,
+                'goals': total_goals,
+                'assists': total_assists,
+                'minutes_played': total_minutes,
+                'average_rating': round(avg_rating, 2),
+                'goals_per_90': round((total_goals / max(1, total_minutes)) * 90, 2) if total_minutes else 0,
+                'assists_per_90': round((total_assists / max(1, total_minutes)) * 90, 2) if total_minutes else 0
+            },
+            'recent_form': recent_form,
+            'injury_status': {
+                'is_injured': any(i.status == 'active' for i in player.injuries),
+                'current_injury': next((
+                    {
+                        'type': i.injury_type,
+                        'description': i.description,
+                        'expected_return': i.expected_return_date.isoformat() if i.expected_return_date else None
+                    } for i in player.injuries if i.status == 'active'
+                ), None)
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting player stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/teams/<int:team_id>/players', methods=['GET'])
+def get_team_players(team_id):
+    """Get all players for a team with basic stats"""
+    try:
+        team = Team.query.get(team_id)
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+        
+        players = Player.query.filter_by(team_id=team_id).all()
+        current_season = request.args.get('season', '2023/2024')
+        
+        player_list = []
+        for player in players:
+            # Get basic season stats
+            performances = PlayerPerformance.query.filter_by(
+                player_id=player.id
+            ).join(Match).filter(
+                Match.season == current_season
+            ).all()
+            
+            player_list.append({
+                'id': player.id,
+                'name': player.name,
+                'position': player.position,
+                'jersey_number': player.jersey_number,
+                'age': player.age,
+                'nationality': player.nationality,
+                'season_stats': {
+                    'appearances': len(performances),
+                    'goals': sum(p.goals for p in performances),
+                    'assists': sum(p.assists for p in performances),
+                    'yellow_cards': sum(p.yellow_cards for p in performances),
+                    'red_cards': sum(p.red_cards for p in performances)
+                },
+                'is_injured': any(i.status == 'active' for i in player.injuries)
+            })
+        
+        # Sort by position and jersey number
+        position_order = {'GK': 0, 'DEF': 1, 'MID': 2, 'FWD': 3}
+        player_list.sort(key=lambda x: (
+            position_order.get(x['position'], 4),
+            x['jersey_number'] or 999
+        ))
+        
+        return jsonify({
+            'team': {
+                'id': team.id,
+                'name': team.name,
+                'logo_url': team.logo_url
+            },
+            'players': player_list,
+            'total_players': len(player_list)
+        })
+    except Exception as e:
+        logger.error(f"Error getting team players: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/dashboard/summary', methods=['GET'])
 def get_dashboard_summary():
     """Get dashboard summary including upcoming matches"""
@@ -2012,3 +2176,317 @@ def get_dashboard_summary():
             'status': 'error',
             'message': str(e)
         })
+
+@api_bp.route('/fixtures/detailed', methods=['GET'])
+def get_detailed_fixtures():
+    """Get detailed fixture information similar to Premier-League-API"""
+    try:
+        team_id = request.args.get('team_id', type=int)
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        limit = request.args.get('limit', 10, type=int)
+        
+        query = Match.query
+        
+        if team_id:
+            query = query.filter(
+                (Match.home_team_id == team_id) | (Match.away_team_id == team_id)
+            )
+        
+        if date_from:
+            query = query.filter(Match.match_date >= datetime.strptime(date_from, '%Y-%m-%d'))
+        
+        if date_to:
+            query = query.filter(Match.match_date <= datetime.strptime(date_to, '%Y-%m-%d'))
+        
+        fixtures = query.order_by(Match.match_date.asc()).limit(limit).all()
+        
+        detailed_fixtures = []
+        for match in fixtures:
+            # Get venue details
+            home_team = Team.query.get(match.home_team_id)
+            
+            # Get recent head to head
+            h2h_count = Match.query.filter(
+                ((Match.home_team_id == match.home_team_id) & (Match.away_team_id == match.away_team_id)) |
+                ((Match.home_team_id == match.away_team_id) & (Match.away_team_id == match.home_team_id)),
+                Match.status == 'finished'
+            ).count()
+            
+            # Get team form
+            home_form = get_team_form(match.home_team_id, 5)
+            away_form = get_team_form(match.away_team_id, 5)
+            
+            detailed_fixtures.append({
+                'id': match.id,
+                'date': match.match_date.isoformat() if match.match_date else None,
+                'kickoff_time': match.match_date.strftime('%H:%M') if match.match_date else None,
+                'venue': {
+                    'name': match.venue or (home_team.stadium if home_team else 'TBD'),
+                    'city': 'TBD',  # Add city to Team model if needed
+                    'capacity': 'TBD'  # Add capacity if available
+                },
+                'home_team': {
+                    'id': match.home_team_id,
+                    'name': match.home_team.name if match.home_team else 'TBD',
+                    'logo_url': match.home_team.logo_url if match.home_team else '',
+                    'form': home_form,
+                    'league_position': get_team_position(match.home_team_id, match.competition, match.season)
+                },
+                'away_team': {
+                    'id': match.away_team_id,
+                    'name': match.away_team.name if match.away_team else 'TBD',
+                    'logo_url': match.away_team.logo_url if match.away_team else '',
+                    'form': away_form,
+                    'league_position': get_team_position(match.away_team_id, match.competition, match.season)
+                },
+                'competition': match.competition,
+                'season': match.season,
+                'round': match.round,
+                'status': match.status,
+                'referee': match.referee,
+                'head_to_head': {
+                    'total_meetings': h2h_count,
+                    'last_meeting': get_last_meeting(match.home_team_id, match.away_team_id)
+                },
+                'tv_channels': [],  # Add if available
+                'odds_available': MatchOdds.query.filter_by(match_id=match.id).count() > 0
+            })
+        
+        return jsonify({
+            'fixtures': detailed_fixtures,
+            'count': len(detailed_fixtures)
+        })
+    except Exception as e:
+        logger.error(f"Error getting detailed fixtures: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+def get_team_form(team_id, matches=5):
+    """Get team's recent form string"""
+    recent_matches = Match.query.filter(
+        (Match.home_team_id == team_id) | (Match.away_team_id == team_id),
+        Match.status == 'finished',
+        Match.home_score.isnot(None)
+    ).order_by(Match.match_date.desc()).limit(matches).all()
+    
+    form = ''
+    for match in recent_matches:
+        if match.home_team_id == team_id:
+            if match.home_score > match.away_score:
+                form += 'W'
+            elif match.home_score < match.away_score:
+                form += 'L'
+            else:
+                form += 'D'
+        else:
+            if match.away_score > match.home_score:
+                form += 'W'
+            elif match.away_score < match.home_score:
+                form += 'L'
+            else:
+                form += 'D'
+    
+    return form[::-1]  # Reverse to show oldest to newest
+
+def get_team_position(team_id, competition, season):
+    """Get team's current league position"""
+    # This is a simplified version - you might want to calculate this properly
+    # or store it in a separate table
+    return 0  # Placeholder
+
+def get_last_meeting(team1_id, team2_id):
+    """Get details of last meeting between two teams"""
+    last_match = Match.query.filter(
+        ((Match.home_team_id == team1_id) & (Match.away_team_id == team2_id)) |
+        ((Match.home_team_id == team2_id) & (Match.away_team_id == team1_id)),
+        Match.status == 'finished',
+        Match.home_score.isnot(None)
+    ).order_by(Match.match_date.desc()).first()
+    
+    if last_match:
+        return {
+            'date': last_match.match_date.isoformat() if last_match.match_date else None,
+            'home_team': last_match.home_team.name if last_match.home_team else 'Unknown',
+            'away_team': last_match.away_team.name if last_match.away_team else 'Unknown',
+            'score': f"{last_match.home_score}-{last_match.away_score}",
+            'venue': last_match.venue
+        }
+    return None
+
+@api_bp.route('/statistics/top-players', methods=['GET'])
+def get_top_players():
+    """Get top scorers and assist leaders"""
+    try:
+        competition = request.args.get('competition', 'Premier League')
+        season = request.args.get('season', '2023/2024')
+        stat_type = request.args.get('type', 'goals')  # goals, assists, both
+        limit = request.args.get('limit', 20, type=int)
+        
+        # Get all player performances for the season
+        performances = db.session.query(
+            PlayerPerformance.player_id,
+            db.func.sum(PlayerPerformance.goals).label('total_goals'),
+            db.func.sum(PlayerPerformance.assists).label('total_assists'),
+            db.func.count(PlayerPerformance.id).label('appearances'),
+            db.func.sum(PlayerPerformance.minutes_played).label('total_minutes')
+        ).join(
+            Match
+        ).filter(
+            Match.competition == competition,
+            Match.season == season,
+            Match.status == 'finished'
+        ).group_by(
+            PlayerPerformance.player_id
+        ).all()
+        
+        player_stats = []
+        for perf in performances:
+            player = Player.query.get(perf.player_id)
+            if player:
+                stats = {
+                    'player': {
+                        'id': player.id,
+                        'name': player.name,
+                        'position': player.position,
+                        'nationality': player.nationality,
+                        'photo_url': player.photo_url
+                    },
+                    'team': {
+                        'id': player.team.id,
+                        'name': player.team.name,
+                        'logo_url': player.team.logo_url
+                    } if player.team else None,
+                    'goals': perf.total_goals or 0,
+                    'assists': perf.total_assists or 0,
+                    'appearances': perf.appearances,
+                    'minutes_played': perf.total_minutes or 0,
+                    'goals_per_90': round((perf.total_goals or 0) / max(1, perf.total_minutes or 1) * 90, 2),
+                    'assists_per_90': round((perf.total_assists or 0) / max(1, perf.total_minutes or 1) * 90, 2)
+                }
+                player_stats.append(stats)
+        
+        # Sort based on stat type
+        if stat_type == 'goals':
+            player_stats.sort(key=lambda x: x['goals'], reverse=True)
+        elif stat_type == 'assists':
+            player_stats.sort(key=lambda x: x['assists'], reverse=True)
+        else:  # both
+            player_stats.sort(key=lambda x: x['goals'] + x['assists'], reverse=True)
+        
+        return jsonify({
+            'competition': competition,
+            'season': season,
+            'stat_type': stat_type,
+            'players': player_stats[:limit]
+        })
+    except Exception as e:
+        logger.error(f"Error getting top players: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/statistics/team-comparison', methods=['GET'])
+def get_team_comparison():
+    """Compare two teams head to head"""
+    try:
+        team1_id = request.args.get('team1_id', type=int)
+        team2_id = request.args.get('team2_id', type=int)
+        
+        if not team1_id or not team2_id:
+            return jsonify({'error': 'Both team1_id and team2_id are required'}), 400
+        
+        team1 = Team.query.get(team1_id)
+        team2 = Team.query.get(team2_id)
+        
+        if not team1 or not team2:
+            return jsonify({'error': 'One or both teams not found'}), 404
+        
+        # Get head to head stats
+        h2h_matches = Match.query.filter(
+            ((Match.home_team_id == team1_id) & (Match.away_team_id == team2_id)) |
+            ((Match.home_team_id == team2_id) & (Match.away_team_id == team1_id)),
+            Match.status == 'finished',
+            Match.home_score.isnot(None)
+        ).all()
+        
+        team1_wins = 0
+        team2_wins = 0
+        draws = 0
+        team1_goals = 0
+        team2_goals = 0
+        
+        for match in h2h_matches:
+            if match.home_team_id == team1_id:
+                team1_goals += match.home_score
+                team2_goals += match.away_score
+                if match.home_score > match.away_score:
+                    team1_wins += 1
+                elif match.away_score > match.home_score:
+                    team2_wins += 1
+                else:
+                    draws += 1
+            else:
+                team1_goals += match.away_score
+                team2_goals += match.home_score
+                if match.away_score > match.home_score:
+                    team1_wins += 1
+                elif match.home_score > match.away_score:
+                    team2_wins += 1
+                else:
+                    draws += 1
+        
+        # Get current season stats
+        season = request.args.get('season', '2023/2024')
+        team1_stats = TeamStatistics.query.filter_by(
+            team_id=team1_id,
+            season=season
+        ).first()
+        team2_stats = TeamStatistics.query.filter_by(
+            team_id=team2_id,
+            season=season
+        ).first()
+        
+        return jsonify({
+            'team1': {
+                'id': team1.id,
+                'name': team1.name,
+                'logo_url': team1.logo_url,
+                'current_form': get_team_form(team1_id, 5),
+                'season_stats': {
+                    'position': get_team_position(team1_id, 'Premier League', season),
+                    'points': team1_stats.wins * 3 + team1_stats.draws if team1_stats else 0,
+                    'goals_for': team1_stats.goals_for if team1_stats else 0,
+                    'goals_against': team1_stats.goals_against if team1_stats else 0
+                } if team1_stats else None
+            },
+            'team2': {
+                'id': team2.id,
+                'name': team2.name,
+                'logo_url': team2.logo_url,
+                'current_form': get_team_form(team2_id, 5),
+                'season_stats': {
+                    'position': get_team_position(team2_id, 'Premier League', season),
+                    'points': team2_stats.wins * 3 + team2_stats.draws if team2_stats else 0,
+                    'goals_for': team2_stats.goals_for if team2_stats else 0,
+                    'goals_against': team2_stats.goals_against if team2_stats else 0
+                } if team2_stats else None
+            },
+            'head_to_head': {
+                'total_matches': len(h2h_matches),
+                'team1_wins': team1_wins,
+                'team2_wins': team2_wins,
+                'draws': draws,
+                'team1_goals': team1_goals,
+                'team2_goals': team2_goals,
+                'last_5_meetings': [
+                    {
+                        'date': m.match_date.isoformat() if m.match_date else None,
+                        'home_team': m.home_team.name,
+                        'away_team': m.away_team.name,
+                        'score': f"{m.home_score}-{m.away_score}",
+                        'venue': m.venue
+                    } for m in h2h_matches[:5]
+                ]
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error comparing teams: {str(e)}")
+        return jsonify({'error': str(e)}), 500
