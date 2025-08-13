@@ -534,3 +534,110 @@ def get_match_odds(match_id):
             'status': 'error',
             'message': str(e)
         }), 500
+
+@api_bp.route('/data/initialize', methods=['POST'])
+def initialize_data():
+    """Initialize the database with some real football data"""
+    try:
+        # Check if we have the Football API key
+        from config import Config
+        api_key = Config.FOOTBALL_API_KEY
+        
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'FOOTBALL_API_KEY not configured',
+                'hint': 'Please set the FOOTBALL_API_KEY environment variable in Render'
+            })
+        
+        # Try to fetch Premier League data
+        collector = FootballDataCollector()
+        
+        # Premier League ID is 2021
+        competition_id = 2021
+        results = {
+            'teams': {'synced': 0, 'error': None},
+            'matches': {'synced': 0, 'error': None}
+        }
+        
+        # Sync teams
+        try:
+            teams_result = collector.sync_teams(competition_id)
+            results['teams'] = teams_result
+        except Exception as e:
+            results['teams']['error'] = str(e)
+            logger.error(f"Error syncing teams: {e}")
+        
+        # Sync recent matches (last 30 days)
+        try:
+            date_from = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            date_to = datetime.now().strftime('%Y-%m-%d')
+            matches_result = collector.sync_matches(competition_id, date_from, date_to)
+            results['matches'] = matches_result
+        except Exception as e:
+            results['matches']['error'] = str(e)
+            logger.error(f"Error syncing matches: {e}")
+        
+        # Get current counts
+        team_count = Team.query.count()
+        match_count = Match.query.count()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Data initialization completed',
+            'results': results,
+            'database_stats': {
+                'total_teams': team_count,
+                'total_matches': match_count,
+                'ready_for_training': match_count >= 50
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in initialize_data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to initialize data',
+            'error': str(e)
+        })
+
+@api_bp.route('/data/stats', methods=['GET'])
+def get_data_stats():
+    """Get current database statistics"""
+    try:
+        team_count = Team.query.count()
+        match_count = Match.query.count()
+        
+        # Get some sample teams
+        sample_teams = Team.query.limit(5).all()
+        
+        # Get recent matches
+        recent_matches = Match.query.order_by(Match.match_date.desc()).limit(5).all()
+        
+        return jsonify({
+            'status': 'success',
+            'stats': {
+                'total_teams': team_count,
+                'total_matches': match_count,
+                'ready_for_training': match_count >= 50,
+                'sample_teams': [
+                    {'id': t.id, 'name': t.name} for t in sample_teams
+                ],
+                'recent_matches': [
+                    {
+                        'id': m.id,
+                        'date': m.match_date.isoformat() if m.match_date else None,
+                        'home_team': m.home_team.name if m.home_team else 'Unknown',
+                        'away_team': m.away_team.name if m.away_team else 'Unknown',
+                        'status': m.status
+                    } for m in recent_matches
+                ]
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting data stats: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to get statistics',
+            'error': str(e)
+        })

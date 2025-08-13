@@ -4,7 +4,6 @@ from flask_cors import CORS
 from models import db
 from config import config
 from api_routes import api_bp
-# from real_data_routes import real_data_bp  # Temporarily disabled
 
 def create_app(config_name=None):
     if config_name is None:
@@ -19,7 +18,13 @@ def create_app(config_name=None):
     
     # Register blueprints
     app.register_blueprint(api_bp)
-    # app.register_blueprint(real_data_bp)  # Temporarily disabled
+    
+    # Try to import and register real_data_bp
+    try:
+        from real_data_routes import real_data_bp
+        app.register_blueprint(real_data_bp)
+    except ImportError:
+        print("Warning: real_data_routes not available")
     
     # Create database tables only if not in production or if explicitly requested
     # In production, we'll handle this separately to avoid startup issues
@@ -38,6 +43,7 @@ def create_app(config_name=None):
             'version': '1.0',
             'status': 'running',
             'environment': config_name,
+            'database': 'PostgreSQL' if 'postgresql' in app.config.get('SQLALCHEMY_DATABASE_URI', '') else 'SQLite',
             'endpoints': {
                 'odds': {
                     'leagues': '/api/v1/odds/leagues',
@@ -55,6 +61,10 @@ def create_app(config_name=None):
                     'predictions': '/api/v1/predictions',
                     'model_status': '/api/v1/model/status',
                     'model_train': '/api/v1/model/train'
+                },
+                'data': {
+                    'initialize': '/api/v1/data/initialize',
+                    'stats': '/api/v1/data/stats'
                 }
             }
         }
@@ -62,7 +72,19 @@ def create_app(config_name=None):
     @app.route('/health')
     def health():
         """Health check endpoint"""
-        return {'status': 'healthy', 'environment': config_name}
+        try:
+            # Test database connection
+            db.session.execute('SELECT 1')
+            db_status = 'connected'
+        except:
+            db_status = 'disconnected'
+            
+        return {
+            'status': 'healthy',
+            'environment': config_name,
+            'database': db_status,
+            'api_key_configured': bool(app.config.get('FOOTBALL_API_KEY'))
+        }
     
     return app
 
