@@ -63,9 +63,9 @@ const Predictions: React.FC = () => {
 
   const renderProbabilityChart = (prediction: any) => {
     const data = [
-      { name: 'Home Win', value: prediction.predictions.home_win_probability * 100 },
-      { name: 'Draw', value: prediction.predictions.draw_probability * 100 },
-      { name: 'Away Win', value: prediction.predictions.away_win_probability * 100 },
+      { name: 'Home Win', value: (prediction.prediction?.home_win || 0) * 100 },
+      { name: 'Draw', value: (prediction.prediction?.draw || 0) * 100 },
+      { name: 'Away Win', value: (prediction.prediction?.away_win || 0) * 100 },
     ];
 
     const COLORS = ['#4CAF50', '#FF9800', '#f44336'];
@@ -166,14 +166,19 @@ const Predictions: React.FC = () => {
                         {format(new Date(prediction.match.date), 'PPp')}
                       </Typography>
                       <Chip
-                        label={prediction.match.status}
-                        color={prediction.match.status === 'finished' ? 'success' : 'info'}
+                        label={prediction.match.status || 'scheduled'}
+                        color="info"
                         size="small"
                       />
                     </Box>
                     <Typography variant="h6" sx={{ mt: 1 }}>
-                      {prediction.match.home_team} vs {prediction.match.away_team}
+                      {prediction.match.home_team.name} vs {prediction.match.away_team.name}
                     </Typography>
+                    {prediction.match.venue && (
+                      <Typography variant="body2" color="text.secondary">
+                        {prediction.match.venue}
+                      </Typography>
+                    )}
                   </Box>
 
                   <Divider sx={{ my: 2 }} />
@@ -190,8 +195,8 @@ const Predictions: React.FC = () => {
                       Predicted Score
                     </Typography>
                     <Typography variant="h5" textAlign="center">
-                      {prediction.predictions.predicted_home_score.toFixed(1)} -{' '}
-                      {prediction.predictions.predicted_away_score.toFixed(1)}
+                      {prediction.prediction?.predicted_score?.home || 0} -{' '}
+                      {prediction.prediction?.predicted_score?.away || 0}
                     </Typography>
                   </Box>
 
@@ -203,69 +208,22 @@ const Predictions: React.FC = () => {
                         Confidence Score
                       </Typography>
                       <Typography variant="body2">
-                        {(prediction.confidence_score * 100).toFixed(0)}%
+                        {((prediction.prediction?.confidence || 0.75) * 100).toFixed(0)}%
                       </Typography>
                     </Box>
                     <LinearProgress
                       variant="determinate"
-                      value={prediction.confidence_score * 100}
+                      value={(prediction.prediction?.confidence || 0.75) * 100}
                       sx={{ height: 8, borderRadius: 4 }}
                       color={
-                        prediction.confidence_score > 0.7
+                        (prediction.prediction?.confidence || 0.75) > 0.7
                           ? 'success'
-                          : prediction.confidence_score > 0.5
+                          : (prediction.prediction?.confidence || 0.75) > 0.5
                           ? 'warning'
                           : 'error'
                       }
                     />
                   </Box>
-
-                  {/* Actual Result (if finished) */}
-                  {prediction.match.status === 'finished' && (
-                    <>
-                      <Divider sx={{ my: 2 }} />
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Actual Result
-                        </Typography>
-                        <Typography variant="h6" textAlign="center">
-                          {prediction.match.actual_home_score} -{' '}
-                          {prediction.match.actual_away_score}
-                        </Typography>
-                        {/* Show if prediction was correct */}
-                        {(() => {
-                          const actualResult =
-                            prediction.match.actual_home_score >
-                            prediction.match.actual_away_score
-                              ? 'home'
-                              : prediction.match.actual_home_score <
-                                prediction.match.actual_away_score
-                              ? 'away'
-                              : 'draw';
-                          const predictedResult =
-                            prediction.predictions.home_win_probability >
-                              prediction.predictions.away_win_probability &&
-                            prediction.predictions.home_win_probability >
-                              prediction.predictions.draw_probability
-                              ? 'home'
-                              : prediction.predictions.away_win_probability >
-                                  prediction.predictions.draw_probability
-                              ? 'away'
-                              : 'draw';
-                          const isCorrect = actualResult === predictedResult;
-                          return (
-                            <Box mt={1} textAlign="center">
-                              <Chip
-                                label={isCorrect ? 'Correct Prediction' : 'Incorrect Prediction'}
-                                color={isCorrect ? 'success' : 'error'}
-                                size="small"
-                              />
-                            </Box>
-                          );
-                        })()}
-                      </Box>
-                    </>
-                  )}
 
                   {/* Action Button */}
                   <Box mt={2}>

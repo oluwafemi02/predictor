@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from models import db
 from config import config
@@ -10,7 +10,7 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.environ.get('FLASK_ENV', 'development')
     
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
     app.config.from_object(config[config_name])
     
     # Initialize extensions
@@ -57,11 +57,15 @@ def create_app(config_name=None):
     
     @app.errorhandler(404)
     def handle_not_found(error):
-        return jsonify({
-            'status': 'error',
-            'message': 'Resource not found',
-            'type': 'not_found_error'
-        }), 404
+        # Check if this is an API route
+        if error.request.path.startswith('/api/'):
+            return jsonify({
+                'status': 'error',
+                'message': 'Resource not found',
+                'type': 'not_found_error'
+            }), 404
+        # For non-API routes, serve the React app
+        return app.send_static_file('index.html')
     
     @app.errorhandler(500)
     def handle_internal_error(error):
@@ -83,6 +87,10 @@ def create_app(config_name=None):
     
     @app.route('/')
     def index():
+        # Serve React app for root route
+        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
+            return app.send_static_file('index.html')
+        # Otherwise, return API info
         return {
             'message': 'Football Prediction API',
             'version': '1.0',
@@ -141,6 +149,15 @@ def create_app(config_name=None):
             },
             'api_key_configured': bool(app.config.get('FOOTBALL_API_KEY'))
         }
+    
+    # Catch-all route for React app - must be last
+    @app.route('/<path:path>')
+    def serve_react_app(path):
+        # Serve static files if they exist
+        if os.path.exists(os.path.join(app.static_folder, path)):
+            return send_from_directory(app.static_folder, path)
+        # Otherwise serve the React app
+        return app.send_static_file('index.html')
     
     return app
 
