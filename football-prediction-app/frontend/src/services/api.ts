@@ -289,6 +289,48 @@ export const getLeagueTable = async (competition: string, season?: string) => {
   return response.data;
 };
 
+// Team Players
+export const getTeamPlayers = async (teamId: number) => {
+  const response = await api.get<{
+    players: Array<{
+      id: number;
+      name: string;
+      position: string;
+      number?: number;
+      age?: number;
+      nationality?: string;
+      injured?: boolean;
+    }>;
+  }>(`/teams/${teamId}/players`);
+  return response.data;
+};
+
+// Team Matches
+export const getTeamMatches = async (teamId: number, limit: number = 20) => {
+  const response = await api.get<{
+    matches: Match[];
+  }>('/matches', {
+    params: {
+      team_id: teamId,
+      per_page: limit,
+    },
+  });
+  return response.data;
+};
+
+// Team Statistics
+export const getTeamStatistics = async (teamId: number, season?: string) => {
+  const response = await api.get<{
+    statistics: TeamStatistics & {
+      position?: number;
+      points?: number;
+    };
+  }>(`/teams/${teamId}`, {
+    params: { season },
+  });
+  return response.data;
+};
+
 // Model
 export const getModelStatus = async () => {
   const response = await api.get<{

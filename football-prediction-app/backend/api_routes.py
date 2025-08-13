@@ -2049,6 +2049,137 @@ def get_player_stats(player_id):
         logger.error(f"Error getting player stats: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/players', methods=['GET'])
+def get_all_players():
+    """Get all players with pagination and filters"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        team_id = request.args.get('team_id', type=int)
+        position = request.args.get('position')
+        search = request.args.get('search')
+        
+        query = Player.query
+        
+        # Apply filters
+        if team_id:
+            query = query.filter_by(team_id=team_id)
+        if position:
+            query = query.filter_by(position=position)
+        if search:
+            query = query.filter(Player.name.ilike(f'%{search}%'))
+        
+        # Paginate
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        players = []
+        for player in paginated.items:
+            # Get current season stats
+            current_season = '2023/24'
+            performances = PlayerPerformance.query.filter_by(
+                player_id=player.id
+            ).join(Match).filter(
+                Match.season == current_season
+            ).all()
+            
+            players.append({
+                'id': player.id,
+                'name': player.name,
+                'position': player.position,
+                'number': player.jersey_number,
+                'age': player.age,
+                'nationality': player.nationality,
+                'height': player.height,
+                'team': {
+                    'id': player.team.id,
+                    'name': player.team.name,
+                    'logo_url': player.team.logo_url
+                } if player.team else None,
+                'injured': any(i.status == 'active' for i in player.injuries),
+                'stats': {
+                    'appearances': len(performances),
+                    'goals': sum(p.goals for p in performances),
+                    'assists': sum(p.assists for p in performances),
+                    'yellow_cards': sum(p.yellow_cards for p in performances),
+                    'red_cards': sum(p.red_cards for p in performances),
+                    'minutes_played': sum(p.minutes_played for p in performances)
+                }
+            })
+        
+        return jsonify({
+            'players': players,
+            'pagination': {
+                'page': page,
+                'pages': paginated.pages,
+                'total': paginated.total,
+                'per_page': per_page
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error fetching players: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/players/<int:player_id>', methods=['GET'])
+def get_player_details(player_id):
+    """Get detailed information about a specific player"""
+    try:
+        player = Player.query.get(player_id)
+        if not player:
+            return jsonify({'error': 'Player not found'}), 404
+        
+        # Get performance by competitions
+        performances = db.session.query(
+            Match.competition,
+            db.func.count(PlayerPerformance.id).label('appearances'),
+            db.func.sum(PlayerPerformance.goals).label('goals'),
+            db.func.sum(PlayerPerformance.assists).label('assists'),
+            db.func.sum(PlayerPerformance.minutes_played).label('minutes')
+        ).join(
+            PlayerPerformance, Match.id == PlayerPerformance.match_id
+        ).filter(
+            PlayerPerformance.player_id == player_id,
+            Match.season == '2023/24'
+        ).group_by(Match.competition).all()
+        
+        # Get injury history
+        injuries = [{
+            'date': injury.injury_date.isoformat(),
+            'injury': injury.injury_type,
+            'days_out': (injury.return_date - injury.injury_date).days if injury.return_date else None
+        } for injury in player.injuries]
+        
+        return jsonify({
+            'player': {
+                'id': player.id,
+                'name': player.name,
+                'position': player.position,
+                'number': player.jersey_number,
+                'age': player.age,
+                'nationality': player.nationality,
+                'height': player.height,
+                'team': {
+                    'id': player.team.id,
+                    'name': player.team.name,
+                    'logo_url': player.team.logo_url
+                } if player.team else None,
+                'injured': any(i.status == 'active' for i in player.injuries)
+            },
+            'performance': {
+                'season': '2023/24',
+                'competitions': [{
+                    'name': perf.competition,
+                    'appearances': perf.appearances,
+                    'goals': perf.goals or 0,
+                    'assists': perf.assists or 0,
+                    'minutes': perf.minutes or 0
+                } for perf in performances]
+            },
+            'injury_history': injuries
+        })
+    except Exception as e:
+        logger.error(f"Error fetching player details: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/teams/<int:team_id>/players', methods=['GET'])
 def get_team_players(team_id):
     """Get all players for a team with basic stats"""
@@ -2489,4 +2620,65 @@ def get_team_comparison():
         })
     except Exception as e:
         logger.error(f"Error comparing teams: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Premier League Integration endpoints
+@api_bp.route('/premier-league/sync-table', methods=['POST'])
+def sync_premier_league_table():
+    """Sync league table from Premier League data"""
+    try:
+        from premier_league_integration import PremierLeagueDataIntegration
+        
+        integration = PremierLeagueDataIntegration()
+        success = integration.update_team_statistics()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'League table updated successfully'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to update league table'
+            }), 500
+    except Exception as e:
+        logger.error(f"Error syncing league table: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/premier-league/fixtures', methods=['GET'])
+def get_premier_league_fixtures():
+    """Get fixtures from Premier League data"""
+    try:
+        from premier_league_integration import PremierLeagueDataIntegration
+        
+        team_name = request.args.get('team')
+        integration = PremierLeagueDataIntegration()
+        fixtures = integration.fetch_fixtures(team_name)
+        
+        return jsonify({
+            'status': 'success',
+            'fixtures': fixtures,
+            'count': len(fixtures)
+        })
+    except Exception as e:
+        logger.error(f"Error fetching fixtures: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/premier-league/table', methods=['GET'])
+def get_live_league_table():
+    """Get live league table from Premier League data"""
+    try:
+        from premier_league_integration import PremierLeagueDataIntegration
+        
+        integration = PremierLeagueDataIntegration()
+        table_data = integration.fetch_league_table()
+        
+        return jsonify({
+            'status': 'success',
+            'table': table_data,
+            'last_updated': datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Error fetching league table: {e}")
         return jsonify({'error': str(e)}), 500
