@@ -153,6 +153,100 @@ class FootballDataCollector:
         db.session.commit()
         logger.info(f"Synced {len(matches_data)} matches")
     
+    def process_and_store_matches(self, matches_data: List[Dict]) -> List[Match]:
+        """Process and store matches from API response"""
+        stored_matches = []
+        
+        for match_data in matches_data:
+            try:
+                # Get or create teams
+                home_team = Team.query.filter_by(
+                    api_id=match_data['homeTeam']['id']
+                ).first()
+                away_team = Team.query.filter_by(
+                    api_id=match_data['awayTeam']['id']
+                ).first()
+                
+                if not home_team or not away_team:
+                    continue
+                
+                # Check if match exists
+                match = Match.query.filter_by(api_id=match_data['id']).first()
+                
+                if not match:
+                    match = Match(
+                        api_id=match_data['id'],
+                        competition_id=match_data.get('competition', {}).get('id'),
+                        season=match_data.get('season', {}).get('startDate', '')[:4],
+                        match_date=datetime.strptime(match_data['utcDate'], '%Y-%m-%dT%H:%M:%SZ'),
+                        status=match_data['status'].lower(),
+                        matchday=match_data.get('matchday'),
+                        home_team_id=home_team.id,
+                        away_team_id=away_team.id,
+                        venue=match_data.get('venue')
+                    )
+                    db.session.add(match)
+                else:
+                    # Update existing match
+                    match.status = match_data['status'].lower()
+                
+                # Update scores if available
+                if match_data['score']['fullTime']['home'] is not None:
+                    match.home_score = match_data['score']['fullTime']['home']
+                    match.away_score = match_data['score']['fullTime']['away']
+                    if match_data['score']['halfTime']['home'] is not None:
+                        match.home_score_halftime = match_data['score']['halfTime']['home']
+                        match.away_score_halftime = match_data['score']['halfTime']['away']
+                
+                stored_matches.append(match)
+                
+            except Exception as e:
+                logger.error(f"Error processing match {match_data.get('id')}: {str(e)}")
+                continue
+        
+        try:
+            db.session.commit()
+            logger.info(f"Processed and stored {len(stored_matches)} matches")
+        except Exception as e:
+            logger.error(f"Error committing matches: {str(e)}")
+            db.session.rollback()
+            
+        return stored_matches
+    
+    def update_match_results(self, matches_data: List[Dict]) -> int:
+        """Update results for existing matches"""
+        updated_count = 0
+        
+        for match_data in matches_data:
+            try:
+                match = Match.query.filter_by(api_id=match_data['id']).first()
+                
+                if match and match_data['status'].lower() == 'finished':
+                    # Update scores
+                    if match_data['score']['fullTime']['home'] is not None:
+                        match.home_score = match_data['score']['fullTime']['home']
+                        match.away_score = match_data['score']['fullTime']['away']
+                        match.status = 'finished'
+                        
+                        if match_data['score']['halfTime']['home'] is not None:
+                            match.home_score_halftime = match_data['score']['halfTime']['home']
+                            match.away_score_halftime = match_data['score']['halfTime']['away']
+                        
+                        updated_count += 1
+                        
+            except Exception as e:
+                logger.error(f"Error updating match {match_data.get('id')}: {str(e)}")
+                continue
+        
+        try:
+            db.session.commit()
+            logger.info(f"Updated results for {updated_count} matches")
+        except Exception as e:
+            logger.error(f"Error committing match updates: {str(e)}")
+            db.session.rollback()
+            
+        return updated_count
+    
     def calculate_team_statistics(self, team_id: int, season: str):
         """Calculate and update team statistics"""
         team = Team.query.get(team_id)

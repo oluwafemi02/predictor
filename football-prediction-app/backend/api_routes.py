@@ -439,6 +439,56 @@ def get_model_status():
             'error': str(e)
         })
 
+@api_bp.route('/scheduler/status', methods=['GET'])
+def scheduler_status():
+    """Get scheduler status and job information"""
+    try:
+        from app import app
+        scheduler_enabled = app.config.get('ENABLE_SCHEDULER', False)
+        
+        if not scheduler_enabled:
+            return jsonify({
+                'status': 'disabled',
+                'message': 'Scheduler is not enabled. Set ENABLE_SCHEDULER=true to enable.',
+                'jobs': []
+            })
+        
+        try:
+            from scheduler import data_scheduler
+            if data_scheduler.scheduler and data_scheduler.scheduler.running:
+                jobs = []
+                for job in data_scheduler.scheduler.get_jobs():
+                    jobs.append({
+                        'id': job.id,
+                        'name': job.name,
+                        'next_run': job.next_run_time.isoformat() if job.next_run_time else None,
+                        'trigger': str(job.trigger)
+                    })
+                
+                return jsonify({
+                    'status': 'running',
+                    'jobs': jobs
+                })
+            else:
+                return jsonify({
+                    'status': 'initialized',
+                    'message': 'Scheduler is initialized but not running',
+                    'jobs': []
+                })
+        except:
+            return jsonify({
+                'status': 'not_initialized',
+                'message': 'Scheduler is enabled but not initialized',
+                'jobs': []
+            })
+            
+    except Exception as e:
+        logger.error(f"Error checking scheduler status: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @api_bp.route('/model/train', methods=['POST'])
 def train_model():
     """Train the prediction model"""
