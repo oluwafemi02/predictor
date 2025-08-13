@@ -8,11 +8,16 @@ class Team(db.Model):
     __tablename__ = 'teams'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    code = db.Column(db.String(10))
+    name = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    code = db.Column(db.String(10), index=True)
     logo_url = db.Column(db.String(255))
     stadium = db.Column(db.String(100))
     founded = db.Column(db.Integer)
+    
+    # Indexes for performance optimization
+    __table_args__ = (
+        db.Index('idx_team_name_code', 'name', 'code'),
+    )
     
     # Relationships
     home_matches = db.relationship('Match', backref='home_team', foreign_keys='Match.home_team_id')
@@ -49,13 +54,13 @@ class Match(db.Model):
     __tablename__ = 'matches'
     
     id = db.Column(db.Integer, primary_key=True)
-    home_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
-    away_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    home_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
+    away_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False, index=True)
     
-    match_date = db.Column(db.DateTime, nullable=False)
+    match_date = db.Column(db.DateTime, nullable=False, index=True)
     venue = db.Column(db.String(100))
-    competition = db.Column(db.String(100))
-    season = db.Column(db.String(20))
+    competition = db.Column(db.String(100), index=True)
+    season = db.Column(db.String(20), index=True)
     round = db.Column(db.String(50))
     
     # Match results
@@ -65,9 +70,16 @@ class Match(db.Model):
     away_score_halftime = db.Column(db.Integer)
     
     # Match status
-    status = db.Column(db.String(20))  # scheduled, in_play, finished, postponed
+    status = db.Column(db.String(20), index=True)  # scheduled, in_play, finished, postponed
     referee = db.Column(db.String(100))
     attendance = db.Column(db.Integer)
+    
+    # Indexes for performance optimization
+    __table_args__ = (
+        db.Index('idx_match_date_status', 'match_date', 'status'),
+        db.Index('idx_match_teams', 'home_team_id', 'away_team_id'),
+        db.Index('idx_match_competition_season', 'competition', 'season'),
+    )
     
     # Predictions
     predictions = db.relationship('Prediction', backref='match')

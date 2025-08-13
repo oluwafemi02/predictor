@@ -109,6 +109,8 @@ export interface Prediction {
   both_teams_score_probability: number;
   confidence_score: number;
   factors: Record<string, string>;
+  created_at: string;
+  model_version?: string;
 }
 
 export interface HeadToHead {
@@ -151,14 +153,29 @@ export interface PaginationResponse<T> {
   };
 }
 
+// Error response interface
+export interface APIError {
+  status: 'error';
+  message: string;
+  field?: string;
+  code?: string;
+}
+
+// Success response wrapper
+export interface APIResponse<T> {
+  status: 'success';
+  data: T;
+  message?: string;
+}
+
 // API Functions
 
 // Teams
-export const getTeams = async (competition?: string) => {
-  const response = await api.get<{ teams: Team[] }>('/teams', {
+export const getTeams = async (competition?: string): Promise<Team[]> => {
+  const response = await api.get<APIResponse<{ teams: Team[] }>>('/teams', {
     params: { competition },
   });
-  return response.data.teams;
+  return response.data.data.teams;
 };
 
 export const getTeamDetails = async (teamId: number, season?: string) => {

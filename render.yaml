@@ -4,8 +4,8 @@ services:
     name: football-prediction-backend
     runtime: python
     rootDir: football-prediction-app/backend
-    buildCommand: "cd .. && cd .. && pip install -r requirements.txt && cd football-prediction-app/backend && chmod +x build.sh && ./build.sh"
-    startCommand: "gunicorn wsgi:app"
+    buildCommand: "pip install -r football-prediction-app/backend/requirements.txt"
+    startCommand: "cd football-prediction-app/backend && gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 wsgi:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -18,6 +18,8 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: RAPIDAPI_KEY
+        sync: false  # You'll need to set this manually in Render dashboard
+      - key: FOOTBALL_API_KEY
         sync: false  # You'll need to set this manually in Render dashboard
 
   # Frontend Static Site
