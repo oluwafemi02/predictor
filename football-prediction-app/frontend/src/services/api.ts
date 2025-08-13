@@ -343,11 +343,4 @@ export const syncMatches = async (competitionId: number, season?: string) => {
   return response.data;
 };
 
-export const getUpcomingMatches = async (limit: number = 15) => {
-  const response = await api.get<{ matches: Match[]; count: number }>('/upcoming-matches', {
-    params: { limit },
-  });
-  return response.data.matches;
-};
-
 export default api;
