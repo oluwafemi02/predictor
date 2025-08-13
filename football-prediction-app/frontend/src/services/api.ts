@@ -49,6 +49,17 @@ export interface Team {
   founded: number;
 }
 
+export interface TeamWithStats extends Team {
+  matches_played?: number;
+  wins?: number;
+  draws?: number;
+  losses?: number;
+  goals_for?: number;
+  goals_against?: number;
+  points?: number;
+  form?: string | null;
+}
+
 export interface TeamStatistics {
   season: string;
   matches_played: number;
@@ -171,8 +182,8 @@ export interface APIResponse<T> {
 // API Functions
 
 // Teams
-export const getTeams = async (competition?: string): Promise<Team[]> => {
-  const response = await api.get<APIResponse<{ teams: Team[] }>>('/teams', {
+export const getTeams = async (competition?: string): Promise<TeamWithStats[]> => {
+  const response = await api.get<APIResponse<{ teams: TeamWithStats[] }>>('/teams', {
     params: { competition },
   });
   return response.data.data.teams;
@@ -213,6 +224,16 @@ export const getMatchDetails = async (matchId: number) => {
     match: MatchDetails;
     head_to_head: HeadToHead | null;
     prediction: Prediction | null;
+    team_form: {
+      home_team: {
+        form: string;
+        recent_matches: number;
+      };
+      away_team: {
+        form: string;
+        recent_matches: number;
+      };
+    };
   }>(`/matches/${matchId}`);
   return response.data;
 };
@@ -256,10 +277,16 @@ export const getCompetitions = async () => {
 };
 
 export const getLeagueTable = async (competition: string, season?: string) => {
-  const response = await api.get<{ table: LeagueTableEntry[] }>('/statistics/league-table', {
+  const response = await api.get<{
+    competition: string;
+    season: string;
+    available_seasons: string[];
+    table: LeagueTableEntry[];
+    last_updated: string;
+  }>('/statistics/league-table', {
     params: { competition, season },
   });
-  return response.data.table;
+  return response.data;
 };
 
 // Model
@@ -268,6 +295,32 @@ export const getModelStatus = async () => {
     is_trained: boolean;
     model_version: string;
     features: string[];
+    last_trained?: string;
+    training_data?: {
+      total_matches: number;
+      finished_matches: number;
+      validation_split: number;
+    };
+    performance?: {
+      accuracy: number;
+      precision: number;
+      recall: number;
+      f1_score: number;
+      ready_for_predictions: boolean;
+      confidence_calibrated: boolean;
+    };
+    model_insights?: {
+      top_features: Array<{
+        name: string;
+        importance: number;
+      }>;
+      ensemble_weights: {
+        xgboost: number;
+        lightgbm: number;
+        random_forest: number;
+        gradient_boosting: number;
+      };
+    };
   }>('/model/status');
   return response.data;
 };
