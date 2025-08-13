@@ -53,6 +53,9 @@ class Config:
         'https://football-prediction-frontend-2cvi.onrender.com'  # Current production domain
     ]
     
+    # Scheduler Configuration
+    ENABLE_SCHEDULER = os.environ.get('ENABLE_SCHEDULER', 'false').lower() == 'true'
+    
     # Pagination
     MATCHES_PER_PAGE = 20
     PREDICTIONS_PER_PAGE = 10

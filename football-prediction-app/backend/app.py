@@ -1,4 +1,5 @@
 import os
+import atexit
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from models import db
@@ -84,6 +85,15 @@ def create_app(config_name=None):
                 print("Database tables created successfully")
             except Exception as e:
                 print(f"Warning: Could not create database tables: {e}")
+    
+    # Initialize scheduler if enabled
+    if app.config.get('ENABLE_SCHEDULER', False):
+        from scheduler import data_scheduler
+        data_scheduler.init_app(app)
+        data_scheduler.start()
+        
+        # Register cleanup on app shutdown
+        atexit.register(lambda: data_scheduler.shutdown())
     
     @app.route('/')
     def index():
