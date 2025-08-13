@@ -5,7 +5,12 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///football_predictions.db'
+    
+    # Database configuration - handle both postgres:// and postgresql://
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url and database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = database_url or 'sqlite:///football_predictions.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # API Configuration
@@ -24,8 +29,12 @@ class Config:
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'redis://localhost:6379/0'
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'redis://localhost:6379/0'
     
-    # CORS Configuration
-    CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:5173']  # React dev servers
+    # CORS Configuration - allow frontend URLs
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else [
+        'http://localhost:3000', 
+        'http://localhost:5173',
+        'https://*.onrender.com'  # Allow Render.com domains
+    ]
     
     # Pagination
     MATCHES_PER_PAGE = 20
@@ -43,7 +52,10 @@ class DevelopmentConfig(Config):
     
 class ProductionConfig(Config):
     DEBUG = False
-    # Override any production-specific settings here
+    # Ensure we have a secret key in production
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ValueError("No SECRET_KEY set for production!")
 
 config = {
     'development': DevelopmentConfig,

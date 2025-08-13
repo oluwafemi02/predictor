@@ -1,12 +1,16 @@
+import os
 from flask import Flask
 from flask_cors import CORS
 from models import db
-from config import Config
+from config import config
 from api_routes import api_bp
 
-def create_app(config_name='default'):
+def create_app(config_name=None):
+    if config_name is None:
+        config_name = os.environ.get('FLASK_ENV', 'development')
+    
     app = Flask(__name__)
-    app.config.from_object(Config)
+    app.config.from_object(config[config_name])
     
     # Initialize extensions
     db.init_app(app)
@@ -40,6 +44,8 @@ def create_app(config_name='default'):
     
     return app
 
+# Create app instance for gunicorn
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
     app.run(debug=True, host='0.0.0.0', port=5000)
