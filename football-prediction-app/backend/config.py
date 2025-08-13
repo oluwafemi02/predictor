@@ -33,13 +33,16 @@ class Config:
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'redis://localhost:6379/0'
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'redis://localhost:6379/0'
     
-    # CORS Configuration - allow frontend URLs
+    # CORS settings
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else [
-        'http://localhost:3000', 
+        'http://localhost:3000',
         'http://localhost:5173',
-        'https://*.onrender.com',  # Allow Render.com domains
-        '*'  # Allow all origins for now (remove in production)
+        'https://football-prediction-frontend-zx5z.onrender.com',
+        'https://*.onrender.com'
     ]
+    CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin']
+    CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+    CORS_SUPPORTS_CREDENTIALS = True
     
     # Pagination
     MATCHES_PER_PAGE = 20

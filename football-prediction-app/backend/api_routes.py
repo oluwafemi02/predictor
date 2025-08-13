@@ -192,6 +192,51 @@ def get_matches():
             }
         })
 
+@api_bp.route('/upcoming-matches', methods=['GET'])
+def get_upcoming_matches():
+    """Get upcoming matches"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        
+        # Get upcoming matches
+        upcoming = Match.query.filter(
+            Match.match_date >= datetime.now(),
+            (Match.status != 'finished') | (Match.home_score.is_(None))
+        ).order_by(Match.match_date.asc()).limit(limit).all()
+        
+        matches = []
+        for match in upcoming:
+            matches.append({
+                'id': match.id,
+                'date': match.match_date.isoformat() if match.match_date else None,
+                'home_team': {
+                    'id': match.home_team_id,
+                    'name': match.home_team.name if match.home_team else 'TBD',
+                    'logo_url': match.home_team.logo_url if match.home_team else ''
+                },
+                'away_team': {
+                    'id': match.away_team_id,
+                    'name': match.away_team.name if match.away_team else 'TBD',
+                    'logo_url': match.away_team.logo_url if match.away_team else ''
+                },
+                'competition': match.competition,
+                'venue': match.venue,
+                'status': match.status,
+                'has_prediction': True  # You can check if prediction exists
+            })
+        
+        return jsonify({
+            'matches': matches,
+            'count': len(matches)
+        })
+    except Exception as e:
+        logger.error(f"Error getting upcoming matches: {str(e)}")
+        return jsonify({
+            'matches': [],
+            'count': 0,
+            'error': str(e)
+        })
+
 @api_bp.route('/upcoming-predictions', methods=['GET'])
 def get_upcoming_predictions():
     """Get upcoming match predictions"""

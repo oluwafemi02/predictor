@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from models import db
 from config import config
@@ -14,7 +14,13 @@ def create_app(config_name=None):
     
     # Initialize extensions
     db.init_app(app)
-    CORS(app, origins=app.config['CORS_ORIGINS'])
+    
+    # Configure CORS with more specific settings
+    CORS(app, 
+         origins=app.config['CORS_ORIGINS'],
+         allow_headers=app.config.get('CORS_ALLOW_HEADERS', ['Content-Type']),
+         methods=app.config.get('CORS_ALLOW_METHODS', ['GET', 'POST']),
+         supports_credentials=app.config.get('CORS_SUPPORTS_CREDENTIALS', False))
     
     # Register blueprints
     app.register_blueprint(api_bp)
@@ -25,6 +31,17 @@ def create_app(config_name=None):
         app.register_blueprint(real_data_bp)
     except ImportError:
         print("Warning: real_data_routes not available")
+    
+    # Add CORS headers to all responses
+    @app.after_request
+    def after_request(response):
+        origin = request.headers.get('Origin')
+        if origin and any(origin.startswith(allowed) or (allowed == '*') for allowed in app.config['CORS_ORIGINS']):
+            response.headers.add('Access-Control-Allow-Origin', origin)
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
     
     # Create database tables only if not in production or if explicitly requested
     # In production, we'll handle this separately to avoid startup issues
