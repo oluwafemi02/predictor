@@ -50,7 +50,8 @@ class Config:
         'http://localhost:3000', 
         'http://localhost:5173',
         'https://football-prediction-frontend.onrender.com',  # Specific production domain
-        'https://football-prediction-frontend-2cvi.onrender.com'  # Current production domain
+        'https://football-prediction-frontend-2cvi.onrender.com',  # Current production domain
+        'https://football-prediction-frontend-zx5z.onrender.com'  # Your frontend domain
     ]
     
     # Scheduler Configuration
