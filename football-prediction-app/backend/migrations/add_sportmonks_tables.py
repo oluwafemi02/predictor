@@ -15,6 +15,7 @@ from sportmonks_models import (
     SportMonksLiveData, SportMonksPlayer, SportMonksStanding
 )
 import logging
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -62,13 +63,12 @@ def drop_sportmonks_tables():
     
     with app.app_context():
         try:
-            from sqlalchemy import text
+            from sqlalchemy import text, inspect
             
-            # Get all SportMonks tables
-            result = db.session.execute(text(
-                "SELECT tablename FROM pg_tables WHERE tablename LIKE 'sportmonks_%'"
-            ))
-            tables = [row[0] for row in result]
+            # Get all SportMonks tables using inspector (safer approach)
+            inspector = inspect(db.engine)
+            all_tables = inspector.get_table_names()
+            tables = [t for t in all_tables if t.startswith('sportmonks_')]
             
             if not tables:
                 logger.info("No SportMonks tables found to drop")
@@ -76,10 +76,20 @@ def drop_sportmonks_tables():
             
             logger.warning(f"Dropping {len(tables)} SportMonks tables...")
             
-            # Drop each table
+            # Drop each table using parameterized query
             for table in tables:
-                db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-                logger.info(f"  - Dropped {table}")
+                # Validate table name to prevent injection
+                if not re.match(r'^sportmonks_[a-zA-Z0-9_]+$', table):
+                    logger.error(f"Invalid table name format: {table}")
+                    continue
+                    
+                # Use SQLAlchemy's table reflection for safe dropping
+                try:
+                    table_obj = db.Table(table, db.metadata, autoload_with=db.engine)
+                    table_obj.drop(db.engine)
+                    logger.info(f"  - Dropped {table}")
+                except Exception as e:
+                    logger.error(f"  - Failed to drop {table}: {str(e)}")
             
             db.session.commit()
             logger.info("All SportMonks tables dropped successfully")

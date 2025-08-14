@@ -4,7 +4,7 @@ Input validation utilities for the Football Prediction API
 
 import re
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Optional, Union, List
 from exceptions import ValidationError
 
 def validate_date_string(date_str: str, field_name: str = "date") -> datetime:
@@ -59,7 +59,7 @@ def validate_status(status: Optional[str]) -> Optional[str]:
     """
     Validate match status parameter
     """
-    valid_statuses = ['scheduled', 'in_play', 'finished', 'postponed']
+    valid_statuses = ['scheduled', 'in_play', 'finished', 'postponed', 'cancelled']
     if status and status not in valid_statuses:
         raise ValidationError(f"status must be one of: {', '.join(valid_statuses)}", field="status")
     return status
@@ -106,8 +106,108 @@ def validate_api_key(api_key: Optional[str], service_name: str = "API") -> str:
     if len(api_key) < 10:
         raise ValidationError(f"{service_name} key appears to be invalid (too short)")
     
-    # Basic format validation - should be alphanumeric
-    if not re.match(r'^[a-zA-Z0-9]+$', api_key):
+    # Basic format validation - should be alphanumeric with some special chars
+    if not re.match(r'^[a-zA-Z0-9_\-]+$', api_key):
         raise ValidationError(f"{service_name} key contains invalid characters")
     
     return api_key
+
+def validate_email(email: str, field_name: str = "email") -> str:
+    """
+    Validate email address format
+    """
+    if not email:
+        raise ValidationError(f"{field_name} is required", field=field_name)
+    
+    # Basic email regex pattern
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+    if not re.match(email_pattern, email):
+        raise ValidationError(f"Invalid {field_name} format", field=field_name)
+    
+    if len(email) > 120:
+        raise ValidationError(f"{field_name} is too long (max 120 characters)", field=field_name)
+    
+    return email.lower().strip()
+
+def validate_password(password: str, field_name: str = "password") -> str:
+    """
+    Validate password strength
+    """
+    if not password:
+        raise ValidationError(f"{field_name} is required", field=field_name)
+    
+    if len(password) < 8:
+        raise ValidationError(f"{field_name} must be at least 8 characters long", field=field_name)
+    
+    # Check for at least one uppercase, one lowercase, one digit
+    if not re.search(r'[A-Z]', password):
+        raise ValidationError(f"{field_name} must contain at least one uppercase letter", field=field_name)
+    
+    if not re.search(r'[a-z]', password):
+        raise ValidationError(f"{field_name} must contain at least one lowercase letter", field=field_name)
+    
+    if not re.search(r'\d', password):
+        raise ValidationError(f"{field_name} must contain at least one number", field=field_name)
+    
+    return password
+
+def validate_match_id(match_id: Union[str, int], field_name: str = "match_id") -> int:
+    """
+    Validate match ID parameter
+    """
+    try:
+        match_id_int = int(match_id)
+        if match_id_int <= 0:
+            raise ValidationError(f"{field_name} must be a positive integer", field=field_name)
+        return match_id_int
+    except (ValueError, TypeError):
+        raise ValidationError(f"{field_name} must be a valid integer", field=field_name)
+
+def validate_float_parameter(value: Union[str, float, None], field_name: str, 
+                           min_value: Optional[float] = None, 
+                           max_value: Optional[float] = None) -> Optional[float]:
+    """
+    Validate float parameter with optional bounds
+    """
+    if value is None:
+        return None
+    
+    try:
+        float_value = float(value)
+        
+        if min_value is not None and float_value < min_value:
+            raise ValidationError(f"{field_name} must be at least {min_value}", field=field_name)
+        
+        if max_value is not None and float_value > max_value:
+            raise ValidationError(f"{field_name} must be at most {max_value}", field=field_name)
+        
+        return float_value
+    except (ValueError, TypeError):
+        raise ValidationError(f"{field_name} must be a valid number", field=field_name)
+
+def validate_integer_list(values: Union[str, List[int]], field_name: str) -> List[int]:
+    """
+    Validate a list of integers (comma-separated string or list)
+    """
+    if isinstance(values, str):
+        try:
+            int_list = [int(v.strip()) for v in values.split(',') if v.strip()]
+        except ValueError:
+            raise ValidationError(f"{field_name} must contain valid integers", field=field_name)
+    elif isinstance(values, list):
+        try:
+            int_list = [int(v) for v in values]
+        except (ValueError, TypeError):
+            raise ValidationError(f"{field_name} must contain valid integers", field=field_name)
+    else:
+        raise ValidationError(f"{field_name} must be a list or comma-separated string", field=field_name)
+    
+    if not int_list:
+        raise ValidationError(f"{field_name} cannot be empty", field=field_name)
+    
+    # Check all are positive
+    if any(v <= 0 for v in int_list):
+        raise ValidationError(f"{field_name} must contain positive integers only", field=field_name)
+    
+    return int_list
