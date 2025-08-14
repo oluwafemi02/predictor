@@ -55,6 +55,22 @@ def health_check():
     health_status = sportmonks_client.health_check()
     return jsonify(health_status), 200
 
+@sportmonks_bp.route('/debug/config', methods=['GET'])
+@cross_origin()
+@handle_errors
+def debug_config():
+    """Debug endpoint to check configuration (remove in production)"""
+    import os
+    config_status = {
+        'sportmonks_api_key_set': bool(os.environ.get('SPORTMONKS_API_KEY')),
+        'sportmonks_primary_token_set': bool(os.environ.get('SPORTMONKS_PRIMARY_TOKEN')),
+        'sportmonks_fallback_tokens_set': bool(os.environ.get('SPORTMONKS_FALLBACK_TOKENS')),
+        'flask_env': os.environ.get('FLASK_ENV', 'not_set'),
+        'cors_origins': current_app.config.get('CORS_ORIGINS', []),
+        'frontend_url_in_cors': 'https://football-prediction-frontend-zx5z.onrender.com' in current_app.config.get('CORS_ORIGINS', [])
+    }
+    return jsonify(config_status), 200
+
 @sportmonks_bp.route('/fixtures/live', methods=['GET'])
 @cross_origin()
 @handle_errors
@@ -115,78 +131,164 @@ def get_live_fixtures():
 @cache_response(timeout=600)
 def get_upcoming_fixtures():
     """Get upcoming fixtures with predictions"""
-    days_ahead = int(request.args.get('days', 7))
-    league_id = request.args.get('league_id')
-    include_predictions = request.args.get('predictions', 'true').lower() == 'true'
-    
-    start_date = datetime.utcnow().strftime('%Y-%m-%d')
-    end_date = (datetime.utcnow() + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
-    
-    # Get fixtures from API
-    league_ids = [int(league_id)] if league_id else None
-    include_params = ['localTeam', 'visitorTeam', 'league', 'venue']
-    
-    fixtures = sportmonks_client.get_fixtures_by_date_range(
-        start_date=start_date,
-        end_date=end_date,
-        league_ids=league_ids,
-        include=include_params
-    )
-    
-    # Process fixtures and add predictions if requested
-    processed_fixtures = []
-    for fixture_data in fixtures:
-        fixture = {
-            'id': fixture_data['id'],
-            'date': fixture_data['starting_at'],
-            'league': {
-                'id': fixture_data.get('league', {}).get('id'),
-                'name': fixture_data.get('league', {}).get('name'),
-                'logo': fixture_data.get('league', {}).get('logo_path')
-            },
-            'home_team': {
-                'id': fixture_data.get('localTeam', {}).get('id'),
-                'name': fixture_data.get('localTeam', {}).get('name'),
-                'logo': fixture_data.get('localTeam', {}).get('logo_path')
-            },
-            'away_team': {
-                'id': fixture_data.get('visitorTeam', {}).get('id'),
-                'name': fixture_data.get('visitorTeam', {}).get('name'),
-                'logo': fixture_data.get('visitorTeam', {}).get('logo_path')
-            },
-            'venue': fixture_data.get('venue', {})
-        }
+    try:
+        days_ahead = int(request.args.get('days', 7))
+        league_id = request.args.get('league_id')
+        include_predictions = request.args.get('predictions', 'true').lower() == 'true'
         
-        # Add predictions if requested
-        if include_predictions:
-            prediction_response = sportmonks_client.get_predictions_by_fixture(fixture_data['id'])
-            if prediction_response and 'data' in prediction_response:
-                prediction_data = prediction_response['data']
-                fixture['predictions'] = {
-                    'match_winner': {
-                        'home_win': prediction_data.get('predictions', {}).get('home', 0),
-                        'draw': prediction_data.get('predictions', {}).get('draw', 0),
-                        'away_win': prediction_data.get('predictions', {}).get('away', 0)
+        start_date = datetime.utcnow().strftime('%Y-%m-%d')
+        end_date = (datetime.utcnow() + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+        
+        logger.info(f"Fetching upcoming fixtures from {start_date} to {end_date}")
+        
+        # Check if API key is configured
+        import os
+        if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+            logger.warning("No SportMonks API key configured, returning mock data")
+            # Return mock data for testing
+            mock_fixtures = [
+                {
+                    'id': 1,
+                    'date': (datetime.utcnow() + timedelta(days=1)).isoformat(),
+                    'league': {
+                        'id': 8,
+                        'name': 'Premier League',
+                        'logo': 'https://via.placeholder.com/50'
                     },
-                    'goals': {
-                        'over_25': prediction_data.get('predictions', {}).get('over_25', 0),
-                        'under_25': prediction_data.get('predictions', {}).get('under_25', 0),
-                        'btts_yes': prediction_data.get('predictions', {}).get('btts_yes', 0),
-                        'btts_no': prediction_data.get('predictions', {}).get('btts_no', 0)
+                    'home_team': {
+                        'id': 1,
+                        'name': 'Manchester United',
+                        'logo': 'https://via.placeholder.com/50'
                     },
-                    'correct_scores': prediction_data.get('predictions', {}).get('correct_scores', [])
+                    'away_team': {
+                        'id': 2,
+                        'name': 'Liverpool',
+                        'logo': 'https://via.placeholder.com/50'
+                    },
+                    'venue': {'name': 'Old Trafford', 'city': 'Manchester'},
+                    'predictions': {
+                        'match_winner': {'home_win': 35, 'draw': 30, 'away_win': 35},
+                        'goals': {'over_25': 60, 'under_25': 40, 'btts_yes': 55, 'btts_no': 45},
+                        'correct_scores': []
+                    } if include_predictions else None
+                },
+                {
+                    'id': 2,
+                    'date': (datetime.utcnow() + timedelta(days=2)).isoformat(),
+                    'league': {
+                        'id': 8,
+                        'name': 'Premier League',
+                        'logo': 'https://via.placeholder.com/50'
+                    },
+                    'home_team': {
+                        'id': 3,
+                        'name': 'Chelsea',
+                        'logo': 'https://via.placeholder.com/50'
+                    },
+                    'away_team': {
+                        'id': 4,
+                        'name': 'Arsenal',
+                        'logo': 'https://via.placeholder.com/50'
+                    },
+                    'venue': {'name': 'Stamford Bridge', 'city': 'London'},
+                    'predictions': {
+                        'match_winner': {'home_win': 40, 'draw': 28, 'away_win': 32},
+                        'goals': {'over_25': 65, 'under_25': 35, 'btts_yes': 58, 'btts_no': 42},
+                        'correct_scores': []
+                    } if include_predictions else None
                 }
+            ]
+            
+            return jsonify({
+                'fixtures': mock_fixtures,
+                'count': len(mock_fixtures),
+                'date_range': {
+                    'start': start_date,
+                    'end': end_date
+                },
+                'is_mock_data': True
+            }), 200
         
-        processed_fixtures.append(fixture)
-    
-    return jsonify({
-        'fixtures': processed_fixtures,
-        'count': len(processed_fixtures),
-        'date_range': {
-            'start': start_date,
-            'end': end_date
-        }
-    }), 200
+        # Get fixtures from API
+        league_ids = [int(league_id)] if league_id else None
+        include_params = ['localTeam', 'visitorTeam', 'league', 'venue']
+        
+        fixtures = sportmonks_client.get_fixtures_by_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            league_ids=league_ids,
+            include=include_params
+        )
+        
+        logger.info(f"Retrieved {len(fixtures)} fixtures from API")
+        
+        # Process fixtures and add predictions if requested
+        processed_fixtures = []
+        for fixture_data in fixtures:
+            fixture = {
+                'id': fixture_data['id'],
+                'date': fixture_data['starting_at'],
+                'league': {
+                    'id': fixture_data.get('league', {}).get('data', {}).get('id') if 'league' in fixture_data else None,
+                    'name': fixture_data.get('league', {}).get('data', {}).get('name') if 'league' in fixture_data else None,
+                    'logo': fixture_data.get('league', {}).get('data', {}).get('logo_path') if 'league' in fixture_data else None
+                },
+                'home_team': {
+                    'id': fixture_data.get('localTeam', {}).get('data', {}).get('id') if 'localTeam' in fixture_data else None,
+                    'name': fixture_data.get('localTeam', {}).get('data', {}).get('name') if 'localTeam' in fixture_data else None,
+                    'logo': fixture_data.get('localTeam', {}).get('data', {}).get('logo_path') if 'localTeam' in fixture_data else None
+                },
+                'away_team': {
+                    'id': fixture_data.get('visitorTeam', {}).get('data', {}).get('id') if 'visitorTeam' in fixture_data else None,
+                    'name': fixture_data.get('visitorTeam', {}).get('data', {}).get('name') if 'visitorTeam' in fixture_data else None,
+                    'logo': fixture_data.get('visitorTeam', {}).get('data', {}).get('logo_path') if 'visitorTeam' in fixture_data else None
+                },
+                'venue': fixture_data.get('venue', {}).get('data', {}) if 'venue' in fixture_data else {}
+            }
+            
+            # Add predictions if requested
+            if include_predictions and fixture_data['id']:
+                try:
+                    prediction_response = sportmonks_client.get_predictions_by_fixture(fixture_data['id'])
+                    if prediction_response and 'data' in prediction_response:
+                        prediction_data = prediction_response['data']
+                        fixture['predictions'] = {
+                            'match_winner': {
+                                'home_win': prediction_data.get('predictions', {}).get('home', 0),
+                                'draw': prediction_data.get('predictions', {}).get('draw', 0),
+                                'away_win': prediction_data.get('predictions', {}).get('away', 0)
+                            },
+                            'goals': {
+                                'over_25': prediction_data.get('predictions', {}).get('over_25', 0),
+                                'under_25': prediction_data.get('predictions', {}).get('under_25', 0),
+                                'btts_yes': prediction_data.get('predictions', {}).get('btts_yes', 0),
+                                'btts_no': prediction_data.get('predictions', {}).get('btts_no', 0)
+                            },
+                            'correct_scores': prediction_data.get('predictions', {}).get('correct_scores', [])
+                        }
+                except Exception as e:
+                    logger.warning(f"Failed to get predictions for fixture {fixture_data['id']}: {str(e)}")
+            
+            processed_fixtures.append(fixture)
+        
+        logger.info(f"Processed {len(processed_fixtures)} fixtures")
+        
+        return jsonify({
+            'fixtures': processed_fixtures,
+            'count': len(processed_fixtures),
+            'date_range': {
+                'start': start_date,
+                'end': end_date
+            }
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in get_upcoming_fixtures: {str(e)}")
+        return jsonify({
+            'error': 'Failed to fetch upcoming fixtures',
+            'message': str(e),
+            'fixtures': [],
+            'count': 0
+        }), 200  # Return 200 with empty data to avoid CORS preflight issues
 
 @sportmonks_bp.route('/predictions/<int:fixture_id>', methods=['GET'])
 @cross_origin()
@@ -393,6 +495,60 @@ def get_team_details(team_id):
     """Get detailed team information including squad and recent form"""
     include_params = request.args.get('include', 'squad,venue,league,stats').split(',')
     
+    # Check if API key is configured
+    import os
+    if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+        logger.warning("No SportMonks API key configured, returning mock team data")
+        # Return mock data for testing
+        mock_teams = {
+            1: {  # Manchester United
+                'id': 1,
+                'name': 'Manchester United',
+                'short_code': 'MUN',
+                'logo': 'https://via.placeholder.com/50',
+                'founded': 1878,
+                'country': 'England',
+                'venue': {
+                    'name': 'Old Trafford',
+                    'city': 'Manchester',
+                    'capacity': 74310,
+                    'image': 'https://via.placeholder.com/300x200'
+                },
+                'squad': [
+                    {'id': 101, 'name': 'David de Gea', 'position': 'Goalkeeper', 'number': 1, 'nationality': 'Spain', 'age': 32, 'image': 'https://via.placeholder.com/50'},
+                    {'id': 102, 'name': 'Harry Maguire', 'position': 'Defender', 'number': 5, 'nationality': 'England', 'age': 30, 'image': 'https://via.placeholder.com/50'},
+                    {'id': 103, 'name': 'Bruno Fernandes', 'position': 'Midfielder', 'number': 8, 'nationality': 'Portugal', 'age': 28, 'image': 'https://via.placeholder.com/50'},
+                    {'id': 104, 'name': 'Marcus Rashford', 'position': 'Forward', 'number': 10, 'nationality': 'England', 'age': 25, 'image': 'https://via.placeholder.com/50'}
+                ]
+            },
+            2: {  # Liverpool
+                'id': 2,
+                'name': 'Liverpool',
+                'short_code': 'LIV',
+                'logo': 'https://via.placeholder.com/50',
+                'founded': 1892,
+                'country': 'England',
+                'venue': {
+                    'name': 'Anfield',
+                    'city': 'Liverpool',
+                    'capacity': 53394,
+                    'image': 'https://via.placeholder.com/300x200'
+                },
+                'squad': [
+                    {'id': 201, 'name': 'Alisson', 'position': 'Goalkeeper', 'number': 1, 'nationality': 'Brazil', 'age': 30, 'image': 'https://via.placeholder.com/50'},
+                    {'id': 202, 'name': 'Virgil van Dijk', 'position': 'Defender', 'number': 4, 'nationality': 'Netherlands', 'age': 31, 'image': 'https://via.placeholder.com/50'},
+                    {'id': 203, 'name': 'Mohamed Salah', 'position': 'Forward', 'number': 11, 'nationality': 'Egypt', 'age': 30, 'image': 'https://via.placeholder.com/50'}
+                ]
+            }
+        }
+        
+        team_info = mock_teams.get(team_id)
+        if not team_info:
+            return jsonify({'error': 'Team not found'}), 404
+        
+        team_info['is_mock_data'] = True
+        return jsonify(team_info), 200
+    
     response = sportmonks_client.get_team_by_id(team_id, include=include_params)
     
     if not response or 'data' not in response:
@@ -438,9 +594,30 @@ def get_team_details(team_id):
 def get_leagues():
     """Get all available leagues"""
     country = request.args.get('country')
-    include_params = request.args.get('include', 'country').split(',')
     
-    response = sportmonks_client.get_leagues(include=include_params)
+    # Check if API key is configured
+    import os
+    if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+        logger.warning("No SportMonks API key configured, returning mock leagues")
+        # Return mock data for testing
+        mock_leagues = [
+            {'id': 8, 'name': 'Premier League', 'country': 'England'},
+            {'id': 384, 'name': 'Serie A', 'country': 'Italy'},
+            {'id': 564, 'name': 'La Liga', 'country': 'Spain'},
+            {'id': 82, 'name': 'Bundesliga', 'country': 'Germany'},
+            {'id': 301, 'name': 'Ligue 1', 'country': 'France'}
+        ]
+        
+        if country:
+            mock_leagues = [l for l in mock_leagues if l['country'].lower() == country.lower()]
+        
+        return jsonify({
+            'leagues': mock_leagues,
+            'count': len(mock_leagues),
+            'is_mock_data': True
+        }), 200
+    
+    response = sportmonks_client.get_leagues(include=['country'])
     
     if not response or 'data' not in response:
         return jsonify({'leagues': []}), 200
@@ -449,19 +626,12 @@ def get_leagues():
     for league_data in response['data']:
         if country and league_data.get('country', {}).get('name', '').lower() != country.lower():
             continue
-        
+            
         leagues.append({
             'id': league_data['id'],
             'name': league_data['name'],
-            'type': league_data.get('type'),
-            'logo': league_data.get('logo_path'),
-            'country': league_data.get('country', {}).get('name') if 'country' in league_data else None,
-            'is_cup': league_data.get('is_cup', False),
-            'active': league_data.get('active', True)
+            'country': league_data.get('country', {}).get('name')
         })
-    
-    # Sort by country and name
-    leagues.sort(key=lambda x: (x.get('country', ''), x['name']))
     
     return jsonify({
         'leagues': leagues,
@@ -528,6 +698,72 @@ def search_teams():
     return jsonify({
         'teams': teams,
         'query': query,
+        'count': len(teams)
+    }), 200
+
+@sportmonks_bp.route('/leagues/<int:league_id>/teams', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=86400)  # Cache for 24 hours
+def get_league_teams(league_id):
+    """Get all teams in a specific league"""
+    include_params = request.args.get('include', 'venue,country').split(',')
+    
+    # Check if API key is configured
+    import os
+    if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+        logger.warning("No SportMonks API key configured, returning mock teams")
+        # Return mock data for testing based on league
+        mock_teams_by_league = {
+            8: [  # Premier League
+                {'id': 1, 'name': 'Manchester United', 'short_code': 'MUN', 'logo': 'https://via.placeholder.com/50', 'founded': 1878, 'country': 'England'},
+                {'id': 2, 'name': 'Liverpool', 'short_code': 'LIV', 'logo': 'https://via.placeholder.com/50', 'founded': 1892, 'country': 'England'},
+                {'id': 3, 'name': 'Chelsea', 'short_code': 'CHE', 'logo': 'https://via.placeholder.com/50', 'founded': 1905, 'country': 'England'},
+                {'id': 4, 'name': 'Arsenal', 'short_code': 'ARS', 'logo': 'https://via.placeholder.com/50', 'founded': 1886, 'country': 'England'}
+            ],
+            384: [  # Serie A
+                {'id': 5, 'name': 'Juventus', 'short_code': 'JUV', 'logo': 'https://via.placeholder.com/50', 'founded': 1897, 'country': 'Italy'},
+                {'id': 6, 'name': 'AC Milan', 'short_code': 'MIL', 'logo': 'https://via.placeholder.com/50', 'founded': 1899, 'country': 'Italy'}
+            ]
+        }
+        
+        mock_teams = mock_teams_by_league.get(league_id, [])
+        
+        return jsonify({
+            'teams': mock_teams,
+            'league_id': league_id,
+            'count': len(mock_teams),
+            'is_mock_data': True
+        }), 200
+    
+    response = sportmonks_client.get_teams_by_league(league_id, include=include_params)
+    
+    if not response or 'data' not in response:
+        return jsonify({'teams': []}), 200
+    
+    teams = []
+    for team_data in response['data']:
+        team = {
+            'id': team_data['id'],
+            'name': team_data['name'],
+            'short_code': team_data.get('short_code'),
+            'logo': team_data.get('logo_path'),
+            'founded': team_data.get('founded'),
+            'country': team_data.get('country', {}).get('name') if 'country' in team_data else None
+        }
+        
+        if 'venue' in team_data and team_data['venue']:
+            team['venue'] = {
+                'name': team_data['venue'].get('name'),
+                'city': team_data['venue'].get('city'),
+                'capacity': team_data['venue'].get('capacity')
+            }
+        
+        teams.append(team)
+    
+    return jsonify({
+        'teams': teams,
+        'league_id': league_id,
         'count': len(teams)
     }), 200
 
