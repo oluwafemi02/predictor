@@ -101,7 +101,7 @@ services:
     staticPublishPath: ./build
     envVars:
       - key: REACT_APP_API_URL
-        value: https://football-prediction-backend.onrender.com
+        value: https://football-prediction-backend-2cvi.onrender.com
       - key: REACT_APP_SPORTMONKS_ENABLED
         value: true
     headers:
