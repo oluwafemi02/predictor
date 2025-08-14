@@ -119,15 +119,14 @@ services:
         source: /*
         destination: /index.html
 
+  # Redis for caching
+  - type: redis
+    name: football-prediction-redis
+    plan: free  # Upgrade for production
+    maxmemoryPolicy: allkeys-lru  # LRU eviction for cache
+
 databases:
   - name: football-prediction-db
     databaseName: football_prediction
     user: football_user
     plan: free  # Upgrade to starter or standard for production
-
-# Redis for caching
-services:
-  - type: redis
-    name: football-prediction-redis
-    plan: free  # Upgrade for production
-    maxmemoryPolicy: allkeys-lru  # LRU eviction for cache
