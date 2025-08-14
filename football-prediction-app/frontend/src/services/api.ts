@@ -324,6 +324,7 @@ export const getPredictions = async (filters: {
   date_from?: string;
   date_to?: string;
   page?: number;
+  competition?: string;
 }) => {
   const response = await api.get<{
     predictions: any[];
