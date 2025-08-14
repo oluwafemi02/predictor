@@ -1,0 +1,214 @@
+/* Predictions View Component Styles */
+
+.predictions-container {
+  animation: fadeIn 0.5s ease-in;
+}
+
+.predictions-header h3 {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.prediction-card {
+  border: none;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.prediction-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+.prediction-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 16px;
+}
+
+.prediction-header .league-info {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+
+.prediction-header .league-logo {
+  height: 20px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.teams-matchup {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 20px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.team-info {
+  flex: 1;
+}
+
+.team-logo-small {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+}
+
+.team-name-small {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.vs-separator {
+  font-weight: 700;
+  color: #6c757d;
+  font-size: 1.2rem;
+  padding: 0 20px;
+}
+
+.prediction-section {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  color: #495057;
+  font-weight: 600;
+  margin-bottom: 15px;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+}
+
+.winner-prediction {
+  margin: 15px 0;
+}
+
+.prediction-badge {
+  font-size: 1rem;
+  padding: 10px 20px;
+  border-radius: 25px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.probabilities {
+  margin-top: 15px;
+}
+
+.prob-item {
+  margin-bottom: 12px;
+}
+
+.prob-item span {
+  display: block;
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.prob-item .progress {
+  height: 22px;
+  border-radius: 11px;
+  background-color: #f0f0f0;
+  overflow: visible;
+}
+
+.prob-item .progress-bar {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+}
+
+.goal-prediction {
+  text-align: center;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  transition: background-color 0.2s;
+}
+
+.goal-prediction:hover {
+  background: #e9ecef;
+}
+
+.goal-label {
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.goal-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #2c3e50;
+}
+
+.prediction-footer {
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  padding: 12px;
+}
+
+.prediction-footer .btn {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  transition: all 0.2s;
+}
+
+.prediction-footer .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Filters styling */
+.form-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.form-select {
+  border-radius: 8px;
+  border: 1px solid #ced4da;
+  font-size: 0.9rem;
+}
+
+.form-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .teams-matchup {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .vs-separator {
+    padding: 10px 0;
+  }
+  
+  .prediction-header {
+    font-size: 0.9rem;
+  }
+  
+  .goal-prediction {
+    padding: 10px;
+  }
+  
+  .goal-value {
+    font-size: 1.1rem;
+  }
+}
