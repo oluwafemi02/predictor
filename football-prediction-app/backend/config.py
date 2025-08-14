@@ -31,6 +31,10 @@ class Config:
     FOOTBALL_API_KEY = os.environ.get('FOOTBALL_API_KEY')
     FOOTBALL_API_BASE_URL = 'https://api.football-data.org/v4/'  # Example API
     
+    # SportMonks API Configuration
+    SPORTMONKS_API_KEY = os.environ.get('SPORTMONKS_API_KEY')
+    SPORTMONKS_API_BASE_URL = 'https://api.sportmonks.com/v3/football'
+    
     # RapidAPI Football Odds Configuration - REQUIRED in production
     RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
     if not RAPIDAPI_KEY and os.environ.get('FLASK_ENV') == 'production':
@@ -67,6 +71,9 @@ class Config:
     
     # Cache Configuration
     CACHE_DEFAULT_TIMEOUT = 300  # 5 minutes
+    CACHE_LIVE_SCORES_TIMEOUT = 30  # 30 seconds for live data
+    CACHE_PREDICTIONS_TIMEOUT = 1800  # 30 minutes for predictions
+    CACHE_STATIC_DATA_TIMEOUT = 86400  # 24 hours for static data
 
 class DevelopmentConfig(Config):
     DEBUG = True

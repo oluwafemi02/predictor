@@ -1,0 +1,209 @@
+/* Value Bets Component Styles */
+
+.value-bets-container {
+  animation: fadeIn 0.5s ease-in;
+}
+
+.value-bets-header h3 {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.value-bets-card {
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.value-bets-header-table {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+
+.value-bets-header-table th {
+  border: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  padding: 15px 10px;
+}
+
+.value-bet-row {
+  transition: all 0.2s;
+}
+
+.value-bet-row:hover {
+  background-color: #f8f9fa;
+  transform: scale(1.01);
+}
+
+.match-info {
+  max-width: 250px;
+}
+
+.match-name {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.9rem;
+}
+
+.market-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+  color: #495057;
+  font-weight: 500;
+}
+
+.selection-badge {
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+}
+
+.probability {
+  font-weight: 700;
+  color: #2c3e50;
+  font-size: 1rem;
+}
+
+.odds {
+  font-weight: 700;
+  color: #007bff;
+  font-size: 1.1rem;
+}
+
+.value-badge {
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.stake-suggestion {
+  font-weight: 700;
+  color: #2c3e50;
+  font-size: 1rem;
+}
+
+.bet-action-btn {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 5px 12px;
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+
+.bet-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.info-card {
+  border: none;
+  border-radius: 12px;
+  transition: transform 0.2s;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.info-card h2 {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.info-card p {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Filter controls */
+.form-label {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.25rem;
+}
+
+.form-select,
+.form-control {
+  border-radius: 8px;
+  border: 1px solid #ced4da;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.form-select:focus,
+.form-control:focus {
+  border-color: #28a745;
+  box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+}
+
+/* Alert styling */
+.alert-info {
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  color: #1565c0;
+}
+
+/* Table responsive */
+.table-responsive {
+  border-radius: 12px;
+}
+
+.table {
+  margin-bottom: 0;
+}
+
+.table td {
+  vertical-align: middle;
+  padding: 12px 10px;
+  border-color: #e9ecef;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .value-bets-header-table th {
+    font-size: 0.75rem;
+    padding: 10px 5px;
+  }
+  
+  .match-name {
+    font-size: 0.85rem;
+  }
+  
+  .value-badge,
+  .selection-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+  
+  .bet-action-btn {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+  }
+  
+  .info-card h2 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Loading and error states */
+.text-center {
+  padding: 40px 20px;
+}
+
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+}

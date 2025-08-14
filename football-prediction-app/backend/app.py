@@ -6,6 +6,7 @@ from models import db
 from config import config
 from api_routes import api_bp
 from exceptions import FootballAPIError, ValidationError, APIKeyError
+from security import add_security_headers
 
 def create_app(config_name=None):
     if config_name is None:
@@ -22,6 +23,9 @@ def create_app(config_name=None):
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
          supports_credentials=True)
     
+    # Add security headers to all responses
+    app.after_request(add_security_headers)
+    
     # Register blueprints
     app.register_blueprint(api_bp)
     
@@ -31,6 +35,14 @@ def create_app(config_name=None):
         app.register_blueprint(real_data_bp)
     except ImportError:
         print("Warning: real_data_routes not available")
+    
+    # Try to import and register SportMonks routes
+    try:
+        from sportmonks_routes import sportmonks_bp
+        app.register_blueprint(sportmonks_bp)
+        print("SportMonks routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: SportMonks routes not available: {str(e)}")
     
     # Error handlers
     @app.errorhandler(ValidationError)
@@ -90,17 +102,25 @@ def create_app(config_name=None):
             except Exception as e:
                 print(f"Warning: Could not create database tables: {e}")
     
-    # Initialize scheduler if enabled and this is the scheduler instance
-    # For Render: Set ENABLE_SCHEDULER=true and IS_SCHEDULER_INSTANCE=true on only one service
-    if app.config.get('ENABLE_SCHEDULER', False) and os.environ.get('IS_SCHEDULER_INSTANCE', 'false').lower() == 'true':
-        from scheduler import data_scheduler
-        data_scheduler.init_app(app)
-        data_scheduler.start()
-        
-        # Register cleanup on app shutdown
-        atexit.register(lambda: data_scheduler.shutdown())
-    elif app.config.get('ENABLE_SCHEDULER', False):
-        print("Scheduler is enabled but this is not the scheduler instance (IS_SCHEDULER_INSTANCE != true)")
+    # Import and initialize scheduler if enabled
+    if app.config.get('ENABLE_SCHEDULER', False):
+        try:
+            from scheduler import init_scheduler
+            scheduler = init_scheduler(app)
+            app.scheduler = scheduler
+            
+            # Also initialize SportMonks scheduler
+            from sportmonks_scheduler import sportmonks_scheduler
+            sportmonks_scheduler.init_app(app)
+            if not sportmonks_scheduler.scheduler.running:
+                sportmonks_scheduler.start()
+                app.sportmonks_scheduler = sportmonks_scheduler
+                print("SportMonks scheduler initialized and started")
+            
+        except ImportError as e:
+            print(f"Warning: Scheduler not available: {str(e)}")
+        except Exception as e:
+            print(f"Error initializing scheduler: {str(e)}")
     
     @app.route('/')
     def index():

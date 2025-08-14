@@ -19,6 +19,7 @@ import TeamDetails from './pages/TeamDetails';
 import Players from './pages/Players';
 import LeagueTable from './pages/LeagueTable';
 import ModelStatus from './pages/ModelStatus';
+import SportMonks from './pages/SportMonks';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -90,6 +91,7 @@ function App() {
                 <Route path="/players" element={<Players />} />
                 <Route path="/league-table" element={<LeagueTable />} />
                 <Route path="/model-status" element={<ModelStatus />} />
+                <Route path="/sportmonks" element={<SportMonks />} />
               </Routes>
             </Layout>
           </Router>
