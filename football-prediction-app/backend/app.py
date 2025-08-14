@@ -198,34 +198,6 @@ def create_app(config_name=None):
             }
         }
     
-    @app.route('/health')
-    def health():
-        """Health check endpoint"""
-        db_status = 'unknown'
-        db_error = None
-        
-        try:
-            # Test database connection
-            from sqlalchemy import text
-            db.session.execute(text('SELECT 1'))
-            db.session.commit()
-            db_status = 'connected'
-        except Exception as e:
-            db_status = 'disconnected'
-            db_error = str(e)
-            
-        return {
-            'status': 'healthy',
-            'environment': config_name,
-            'database': {
-                'status': db_status,
-                'error': db_error,
-                'uri_configured': bool(app.config.get('SQLALCHEMY_DATABASE_URI')),
-                'is_postgresql': 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
-            },
-            'api_key_configured': bool(app.config.get('FOOTBALL_API_KEY'))
-        }
-    
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')
     def serve_react_app(path):
