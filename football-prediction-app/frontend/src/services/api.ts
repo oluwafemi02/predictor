@@ -9,16 +9,39 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable cookie support
 });
+
+// Token management
+const tokenManager = {
+  getAccessToken: () => localStorage.getItem('access_token'),
+  getRefreshToken: () => localStorage.getItem('refresh_token'),
+  setTokens: (tokens: { access_token: string; refresh_token: string }) => {
+    localStorage.setItem('access_token', tokens.access_token);
+    localStorage.setItem('refresh_token', tokens.refresh_token);
+  },
+  clearTokens: () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+  }
+};
 
 // Request interceptor for auth
 api.interceptors.request.use(
   (config) => {
     // Add auth token if available
-    const token = localStorage.getItem('authToken');
+    const token = tokenManager.getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add API key if available (for legacy support)
+    const apiKey = localStorage.getItem('apiKey');
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey;
+    }
+    
     return config;
   },
   (error) => {
@@ -26,15 +49,73 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor for error handling and token refresh
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('authToken');
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = tokenManager.getRefreshToken();
+      
+      if (refreshToken) {
+        try {
+          const response = await api.post('/auth/refresh', {}, {
+            headers: {
+              Authorization: `Bearer ${refreshToken}`
+            }
+          });
+          
+          const { tokens } = response.data;
+          tokenManager.setTokens(tokens);
+          processQueue(null, tokens.access_token);
+          
+          originalRequest.headers.Authorization = `Bearer ${tokens.access_token}`;
+          return api(originalRequest);
+        } catch (err) {
+          processQueue(err, null);
+          tokenManager.clearTokens();
+          window.location.href = '/login';
+          return Promise.reject(err);
+        } finally {
+          isRefreshing = false;
+        }
+      } else {
+        // No refresh token, redirect to login
+        tokenManager.clearTokens();
+        window.location.href = '/login';
+      }
     }
+
     return Promise.reject(error);
   }
 );
@@ -384,5 +465,73 @@ export const syncMatches = async (competitionId: number, season?: string) => {
   });
   return response.data;
 };
+
+// Authentication APIs
+export const authAPI = {
+  // Register new user
+  register: async (data: {
+    username: string;
+    email: string;
+    password: string;
+  }) => {
+    const response = await api.post('/auth/register', data);
+    if (response.data.tokens) {
+      tokenManager.setTokens(response.data.tokens);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  // Login
+  login: async (data: {
+    username: string;
+    password: string;
+  }) => {
+    const response = await api.post('/auth/login', data);
+    if (response.data.tokens) {
+      tokenManager.setTokens(response.data.tokens);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  // Logout
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      tokenManager.clearTokens();
+      window.location.href = '/login';
+    }
+  },
+
+  // Get current user
+  getCurrentUser: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+  },
+
+  // Generate API key
+  generateApiKey: async () => {
+    const response = await api.post('/auth/api-key');
+    return response.data;
+  },
+
+  // Check if authenticated
+  isAuthenticated: () => {
+    return !!tokenManager.getAccessToken();
+  },
+
+  // Get stored user
+  getStoredUser: () => {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+  }
+};
+
+// Export everything
+export { tokenManager };
 
 export default api;

@@ -28,13 +28,17 @@ class SportMonksAPIClient:
         # Initialize token manager for secure storage
         self.token_manager = TokenManager()
         
-        # Primary token (new one provided by user) - stored securely
-        primary_token_raw = "cCo0Sn0Fj6BnSmdigHu0oveKznsuZMZzXYe0jIaDDmo8ZymwBP7XjFZCYJPh"
-        self.primary_token = primary_token_raw  # Will be encrypted when stored
+        # Primary token from environment variables - stored securely
+        primary_token_raw = os.environ.get('SPORTMONKS_PRIMARY_TOKEN')
+        if not primary_token_raw:
+            logger.warning("SPORTMONKS_PRIMARY_TOKEN not set, using fallback tokens only")
+            primary_token_raw = Config.SPORTMONKS_API_KEY
+        
+        self.primary_token = primary_token_raw if primary_token_raw else None
         
         # Fallback tokens from environment variables
         self.fallback_tokens = []
-        if Config.SPORTMONKS_API_KEY:
+        if Config.SPORTMONKS_API_KEY and Config.SPORTMONKS_API_KEY != self.primary_token:
             self.fallback_tokens.append(Config.SPORTMONKS_API_KEY)
         
         # Additional fallback tokens can be added here
@@ -42,7 +46,10 @@ class SportMonksAPIClient:
         self.fallback_tokens.extend([t.strip() for t in env_tokens if t.strip()])
         
         # Log token status (masked for security)
-        logger.info(f"Primary token configured: {self.token_manager.mask_token(self.primary_token)}")
+        if self.primary_token:
+            logger.info(f"Primary token configured: {self.token_manager.mask_token(self.primary_token)}")
+        else:
+            logger.info("No primary token configured, using fallback tokens only")
         logger.info(f"Fallback tokens available: {len(self.fallback_tokens)}")
         
         # Current active token

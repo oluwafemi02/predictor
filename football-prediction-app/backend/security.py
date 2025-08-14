@@ -32,20 +32,25 @@ class TokenManager:
                 logger.error(f"Invalid encryption key in environment: {str(e)}")
         
         # Generate new key from password
-        password = os.environ.get('TOKEN_ENCRYPTION_PASSWORD', 'default-secure-password-change-in-production')
-        salt = os.environ.get('TOKEN_ENCRYPTION_SALT', 'default-salt-change-in-production').encode()
+        password = os.environ.get('TOKEN_ENCRYPTION_PASSWORD')
+        salt = os.environ.get('TOKEN_ENCRYPTION_SALT')
+        
+        if not password or not salt:
+            # Only allow defaults in development
+            if os.environ.get('FLASK_ENV') == 'production':
+                raise ValueError("TOKEN_ENCRYPTION_PASSWORD and TOKEN_ENCRYPTION_SALT must be set in production!")
+            else:
+                logger.warning("Using default encryption settings - NOT SAFE FOR PRODUCTION!")
+                password = 'dev-only-password'
+                salt = 'dev-only-salt'
         
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=salt,
+            salt=salt.encode(),
             iterations=100000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        
-        # Log warning if using defaults
-        if password == 'default-secure-password-change-in-production':
-            logger.warning("Using default encryption password - change in production!")
         
         return key
     

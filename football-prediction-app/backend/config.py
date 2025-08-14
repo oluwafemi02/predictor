@@ -81,13 +81,26 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     
-    # For production, use database URL or fall back to SQLite with warning
-    SQLALCHEMY_DATABASE_URI = get_database_url() or 'sqlite:///football_predictions_temp.db'
+    # For production, use database URL or raise error
+    SQLALCHEMY_DATABASE_URI = get_database_url()
+    if not SQLALCHEMY_DATABASE_URI:
+        raise ValueError("DATABASE_URL must be set in production!")
     
     # Ensure we have a secret key in production
     SECRET_KEY = os.environ.get('SECRET_KEY')
     if not SECRET_KEY:
         raise ValueError("No SECRET_KEY set for production!")
+    
+    # Ensure we have encryption keys in production
+    if not os.environ.get('TOKEN_ENCRYPTION_PASSWORD'):
+        raise ValueError("TOKEN_ENCRYPTION_PASSWORD must be set in production!")
+    if not os.environ.get('TOKEN_ENCRYPTION_SALT'):
+        raise ValueError("TOKEN_ENCRYPTION_SALT must be set in production!")
+    
+    # Stricter CORS in production
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else []
+    if not CORS_ORIGINS:
+        raise ValueError("CORS_ORIGINS must be set in production!")
 
 config = {
     'development': DevelopmentConfig,
