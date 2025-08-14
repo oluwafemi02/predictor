@@ -22,11 +22,15 @@ def create_app(config_name=None):
     
     # Initialize extensions
     db.init_app(app)
+    
+    # Configure CORS with explicit settings
     CORS(app, 
          origins=app.config['CORS_ORIGINS'],
          allow_headers=['Content-Type', 'Authorization', 'Access-Control-Allow-Origin', 'X-API-Key'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-         supports_credentials=True)
+         supports_credentials=True,
+         expose_headers=['Content-Type', 'Authorization'],
+         max_age=3600)  # Cache preflight requests for 1 hour
     
     # Initialize JWT authentication
     try:

@@ -3,7 +3,8 @@ import { Container, Tab, Tabs } from 'react-bootstrap';
 import LiveScores from '../components/LiveScores';
 import PredictionsView from '../components/PredictionsView';
 import ValueBets from '../components/ValueBets';
-import { Activity, Brain, DollarSign } from 'lucide-react';
+import SquadView from '../components/SquadView';
+import { Activity, Brain, DollarSign, Users } from 'lucide-react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './SportMonks.css';
 
@@ -63,6 +64,20 @@ const SportMonks: React.FC = () => {
         >
           <div className="tab-content-wrapper">
             <ValueBets />
+          </div>
+        </Tab>
+        
+        <Tab 
+          eventKey="squads" 
+          title={
+            <span className="tab-title">
+              <Users size={20} className="me-2" />
+              Team Squads
+            </span>
+          }
+        >
+          <div className="tab-content-wrapper">
+            <SquadView />
           </div>
         </Tab>
       </Tabs>

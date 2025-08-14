@@ -322,13 +322,18 @@ class SportMonksAPIClient:
         """Get in-play odds for a live fixture"""
         return self._make_request(f'odds/inplay/fixtures/{fixture_id}', cache_ttl=10)
     
-    def search_teams(self, search_query: str) -> Optional[Dict]:
+    def search_teams(self, query: str) -> Optional[Dict]:
         """Search for teams by name"""
-        params = {
-            'filter[name]': search_query
-        }
-        
-        return self._make_request('teams', params)
+        params = {'name': query}
+        return self._make_request('teams/search', params=params)
+    
+    def get_teams_by_league(self, league_id: int, include: List[str] = None) -> Optional[Dict]:
+        """Get all teams in a specific league"""
+        endpoint = f'teams/league/{league_id}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        return self._make_request(endpoint, params=params)
     
     def get_seasons(self, league_id: Optional[int] = None) -> Optional[Dict]:
         """Get available seasons"""

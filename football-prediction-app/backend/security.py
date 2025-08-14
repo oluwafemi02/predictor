@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import secrets
 import logging
 from typing import Optional
+from flask import request
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,19 @@ def add_security_headers(response):
     # Strict Transport Security (for HTTPS)
     if os.environ.get('FLASK_ENV') == 'production':
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    # IMPORTANT: Don't override CORS headers if they're already set by Flask-CORS
+    # Check if Access-Control-Allow-Origin is already set
+    if 'Access-Control-Allow-Origin' not in response.headers:
+        # Only set CORS headers if they haven't been set by Flask-CORS
+        origin = request.headers.get('Origin')
+        if origin and origin in ['https://football-prediction-frontend-zx5z.onrender.com',
+                                  'https://football-prediction-frontend-2cvi.onrender.com',
+                                  'https://football-prediction-frontend.onrender.com']:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-API-Key'
     
     return response
 
