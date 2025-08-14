@@ -65,6 +65,14 @@ def create_app(config_name=None):
     except ImportError as e:
         print(f"Warning: SportMonks routes not available: {str(e)}")
     
+    # Register sync routes
+    try:
+        from sync_routes import sync_bp
+        app.register_blueprint(sync_bp)
+        print("Sync routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: Sync routes not available: {str(e)}")
+    
     # Error handlers
     @app.errorhandler(ValidationError)
     def handle_validation_error(error):
