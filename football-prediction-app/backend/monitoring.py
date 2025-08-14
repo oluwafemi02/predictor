@@ -363,7 +363,32 @@ def setup_monitoring(app):
     @app.route('/health')
     def health():
         """Basic health check endpoint"""
-        return {'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}
+        db_status = 'unknown'
+        db_error = None
+        
+        try:
+            # Test database connection
+            from sqlalchemy import text
+            from models import db
+            db.session.execute(text('SELECT 1'))
+            db.session.commit()
+            db_status = 'connected'
+        except Exception as e:
+            db_status = 'disconnected'
+            db_error = str(e)
+            
+        return {
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'environment': app.config.get('ENV', 'production'),
+            'database': {
+                'status': db_status,
+                'error': db_error,
+                'uri_configured': bool(app.config.get('SQLALCHEMY_DATABASE_URI')),
+                'is_postgresql': 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+            },
+            'api_key_configured': bool(app.config.get('FOOTBALL_API_KEY'))
+        }
     
     @app.route('/health/detailed')
     def health_detailed():
