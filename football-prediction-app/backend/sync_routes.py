@@ -10,9 +10,9 @@ import logging
 
 from models import db
 from data_collector import FootballDataCollector
-from sportmonks_client import SportMonksClient
+from sportmonks_client import SportMonksAPIClient as SportMonksClient
 from sportmonks_scheduler import SportMonksScheduler
-from scheduler import FootballScheduler
+from scheduler import DataScheduler as FootballScheduler
 from auth import require_api_key
 
 logger = logging.getLogger(__name__)

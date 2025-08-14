@@ -134,8 +134,8 @@ def create_app(config_name=None):
     # Import and initialize scheduler if enabled
     if app.config.get('ENABLE_SCHEDULER', False):
         try:
-            from scheduler import init_scheduler
-            scheduler = init_scheduler(app)
+            from scheduler import DataScheduler
+            scheduler = DataScheduler(app)
             app.scheduler = scheduler
             
             # Also initialize SportMonks scheduler
