@@ -31,9 +31,9 @@ services:
       - key: SPORTMONKS_FALLBACK_TOKENS
         sync: false  # Set manually in Render dashboard
       - key: TOKEN_ENCRYPTION_PASSWORD
-        generateValue: true
+        sync: false  # Set manually in Render dashboard - use strong password
       - key: TOKEN_ENCRYPTION_SALT
-        generateValue: true
+        sync: false  # Set manually in Render dashboard - use unique salt
       - key: INTERNAL_API_KEYS
         generateValue: true
       - key: ENABLE_SCHEDULER
@@ -47,7 +47,7 @@ services:
     runtime: python
     rootDir: football-prediction-app/backend
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python -c 'from app import create_app; app = create_app(); app.app_context().push(); input(\"Scheduler running... Press Enter to stop\")'"
+    startCommand: "python run_scheduler.py"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0

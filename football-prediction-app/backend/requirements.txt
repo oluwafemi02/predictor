@@ -28,3 +28,6 @@ click==8.1.7
 cryptography==41.0.7
 pytz==2023.3.post1
 psutil==5.9.6
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0

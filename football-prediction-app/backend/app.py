@@ -7,6 +7,11 @@ from config import config
 from api_routes import api_bp
 from exceptions import FootballAPIError, ValidationError, APIKeyError
 from security import add_security_headers
+from logging_config import setup_logging, get_logger
+
+# Initialize logging
+setup_logging()
+logger = get_logger(__name__)
 
 def create_app(config_name=None):
     if config_name is None:
@@ -59,6 +64,14 @@ def create_app(config_name=None):
         print("SportMonks routes registered successfully")
     except ImportError as e:
         print(f"Warning: SportMonks routes not available: {str(e)}")
+    
+    # Register sync routes
+    try:
+        from sync_routes import sync_bp
+        app.register_blueprint(sync_bp)
+        print("Sync routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: Sync routes not available: {str(e)}")
     
     # Error handlers
     @app.errorhandler(ValidationError)
