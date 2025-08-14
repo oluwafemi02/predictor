@@ -100,7 +100,13 @@ class ProductionConfig(Config):
     # Stricter CORS in production
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else []
     if not CORS_ORIGINS:
-        raise ValueError("CORS_ORIGINS must be set in production!")
+        # Instead of raising an error, use a default set of production origins
+        CORS_ORIGINS = [
+            'https://football-prediction-frontend.onrender.com',
+            'https://football-prediction-frontend-2cvi.onrender.com',
+            'https://football-prediction-frontend-zx5z.onrender.com'
+        ]
+        print("Warning: CORS_ORIGINS not set, using default production origins")
 
 config = {
     'development': DevelopmentConfig,
