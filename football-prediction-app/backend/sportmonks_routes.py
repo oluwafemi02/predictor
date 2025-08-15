@@ -402,7 +402,24 @@ def get_upcoming_fixtures():
                         pred_response = get_fixture_predictions(fixture['id'])
                         if pred_response[1] == 200:
                             pred_data = json.loads(pred_response[0].data)
-                            fixture['predictions'] = pred_data.get('predictions', {})
+                            predictions = pred_data.get('predictions', {})
+                            
+                            # Convert new format to old format for backward compatibility
+                            if 'match_winner' in predictions and predictions['match_winner']:
+                                old_format_predictions = {
+                                    'match_winner': predictions['match_winner'],
+                                    'goals': {
+                                        'over_25': predictions.get('goals', {}).get('over_25', 0),
+                                        'under_25': predictions.get('goals', {}).get('under_25', 0),
+                                        'btts_yes': predictions.get('btts', {}).get('yes', 0),
+                                        'btts_no': predictions.get('btts', {}).get('no', 0)
+                                    },
+                                    'correct_scores': predictions.get('correct_scores', [])
+                                }
+                                fixture['predictions'] = old_format_predictions
+                            else:
+                                fixture['predictions'] = predictions
+                            
                             fixture['prediction_confidence'] = pred_data.get('confidence', 'low')
                         else:
                             fixture['predictions'] = None
@@ -719,7 +736,24 @@ def get_all_fixtures():
                         pred_response = get_fixture_predictions(fixture['id'])
                         if pred_response[1] == 200:
                             pred_data = json.loads(pred_response[0].data)
-                            fixture['predictions'] = pred_data.get('predictions', {})
+                            predictions = pred_data.get('predictions', {})
+                            
+                            # Convert new format to old format for backward compatibility
+                            if 'match_winner' in predictions and predictions['match_winner']:
+                                old_format_predictions = {
+                                    'match_winner': predictions['match_winner'],
+                                    'goals': {
+                                        'over_25': predictions.get('goals', {}).get('over_25', 0),
+                                        'under_25': predictions.get('goals', {}).get('under_25', 0),
+                                        'btts_yes': predictions.get('btts', {}).get('yes', 0),
+                                        'btts_no': predictions.get('btts', {}).get('no', 0)
+                                    },
+                                    'correct_scores': predictions.get('correct_scores', [])
+                                }
+                                fixture['predictions'] = old_format_predictions
+                            else:
+                                fixture['predictions'] = predictions
+                            
                             fixture['prediction_confidence'] = pred_data.get('confidence', 'low')
                         else:
                             fixture['predictions'] = None

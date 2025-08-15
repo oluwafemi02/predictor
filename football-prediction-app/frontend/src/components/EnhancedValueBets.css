@@ -1,0 +1,58 @@
+.enhanced-value-bets {
+  padding: 1rem 0;
+}
+
+.fixture-prediction-card {
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.fixture-prediction-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.value-bet-card {
+  border: 2px solid #28a745;
+}
+
+.value-bet-card .card-header {
+  border-radius: 8px 8px 0 0;
+}
+
+.nav-pills .nav-link {
+  border-radius: 20px;
+  padding: 0.5rem 1.5rem;
+  margin-right: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.nav-pills .nav-link.active {
+  background-color: #007bff;
+}
+
+.nav-pills .nav-link:hover {
+  background-color: #f8f9fa;
+  color: #007bff;
+}
+
+.enhanced-value-bets hr {
+  border-color: #e9ecef;
+  margin: 1.5rem 0;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .enhanced-value-bets .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .nav-pills {
+    flex-wrap: wrap;
+  }
+  
+  .nav-pills .nav-link {
+    margin-bottom: 0.5rem;
+  }
+}
