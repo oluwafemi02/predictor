@@ -836,3 +836,208 @@ def get_head_to_head(fixture_id):
         'home_team': fixture_data['localTeam']['data']['name'],
         'away_team': fixture_data['visitorTeam']['data']['name']
     }), 200
+
+@sportmonks_bp.route('/schedules/teams/<int:team_id>', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=600)
+def get_team_schedule(team_id):
+    """Get the complete schedule for a specific team"""
+    include_params = request.args.get('include', 'localTeam,visitorTeam,league,venue,stage,round').split(',')
+    
+    # Check if API key is configured
+    import os
+    if not os.getenv('SPORTMONKS_API_KEY'):
+        # Return mock data if no API key
+        current_date = datetime.now()
+        mock_fixtures = []
+        
+        # Generate some mock upcoming fixtures
+        for i in range(5):
+            fixture_date = current_date + timedelta(days=i*7)
+            mock_fixtures.append({
+                'id': 10000 + i,
+                'league_id': 501,
+                'league': {'name': 'Premier League'},
+                'round': f'Round {i+25}',
+                'stage_id': 1,
+                'localteam_id': team_id if i % 2 == 0 else 502 + i,
+                'visitorteam_id': 502 + i if i % 2 == 0 else team_id,
+                'localTeam': {'name': 'Team Home', 'logo_path': None},
+                'visitorTeam': {'name': 'Team Away', 'logo_path': None},
+                'starting_at': fixture_date.isoformat(),
+                'venue': {'name': 'Stadium Name'},
+                'status': 'NS'
+            })
+        
+        return jsonify({
+            'fixtures': mock_fixtures,
+            'count': len(mock_fixtures),
+            'is_mock_data': True
+        }), 200
+    
+    # Get real data from SportMonks API
+    response = sportmonks_client.get(f'schedules/teams/{team_id}', include=include_params)
+    
+    if not response or 'data' not in response:
+        return jsonify({'error': 'Failed to fetch team schedule'}), 500
+    
+    fixtures = []
+    for fixture in response['data']:
+        fixtures.append({
+            'id': fixture['id'],
+            'league_id': fixture['league_id'],
+            'league': fixture.get('league', {}).get('data', {}) if 'league' in fixture else None,
+            'round': fixture.get('round'),
+            'stage_id': fixture.get('stage_id'),
+            'localteam_id': fixture['localteam_id'],
+            'visitorteam_id': fixture['visitorteam_id'],
+            'localTeam': fixture.get('localTeam', {}).get('data', {}) if 'localTeam' in fixture else None,
+            'visitorTeam': fixture.get('visitorTeam', {}).get('data', {}) if 'visitorTeam' in fixture else None,
+            'starting_at': fixture['time']['starting_at']['date_time'],
+            'venue': fixture.get('venue', {}).get('data', {}) if 'venue' in fixture else None,
+            'status': fixture['time']['status']
+        })
+    
+    return jsonify({
+        'fixtures': fixtures,
+        'count': len(fixtures)
+    }), 200
+
+@sportmonks_bp.route('/schedules/seasons/<int:season_id>/teams/<int:team_id>', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=600)
+def get_team_season_schedule(season_id, team_id):
+    """Get the schedule for a specific team in a specific season"""
+    include_params = request.args.get('include', 'localTeam,visitorTeam,league,venue,stage,round').split(',')
+    
+    # Check if API key is configured
+    import os
+    if not os.getenv('SPORTMONKS_API_KEY'):
+        # Return mock data if no API key
+        return jsonify({
+            'fixtures': [],
+            'count': 0,
+            'is_mock_data': True,
+            'message': 'Configure SportMonks API key to get real season schedule data'
+        }), 200
+    
+    # Get real data from SportMonks API
+    response = sportmonks_client.get(f'schedules/seasons/{season_id}/teams/{team_id}', include=include_params)
+    
+    if not response or 'data' not in response:
+        return jsonify({'error': 'Failed to fetch team season schedule'}), 500
+    
+    fixtures = []
+    for fixture in response['data']:
+        fixtures.append({
+            'id': fixture['id'],
+            'league_id': fixture['league_id'],
+            'league': fixture.get('league', {}).get('data', {}) if 'league' in fixture else None,
+            'round': fixture.get('round'),
+            'stage_id': fixture.get('stage_id'),
+            'localteam_id': fixture['localteam_id'],
+            'visitorteam_id': fixture['visitorteam_id'],
+            'localTeam': fixture.get('localTeam', {}).get('data', {}) if 'localTeam' in fixture else None,
+            'visitorTeam': fixture.get('visitorTeam', {}).get('data', {}) if 'visitorTeam' in fixture else None,
+            'starting_at': fixture['time']['starting_at']['date_time'],
+            'venue': fixture.get('venue', {}).get('data', {}) if 'venue' in fixture else None,
+            'status': fixture['time']['status']
+        })
+    
+    return jsonify({
+        'fixtures': fixtures,
+        'count': len(fixtures),
+        'season_id': season_id
+    }), 200
+
+@sportmonks_bp.route('/fixtures/between/<start_date>/<end_date>/<int:team_id>', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=300)
+def get_team_fixtures_between_dates(start_date, end_date, team_id):
+    """Get fixtures for a specific team between two dates"""
+    include_params = request.args.get('include', 'localTeam,visitorTeam,league,venue,stage,round').split(',')
+    
+    # Validate date format
+    try:
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        if end_dt < start_dt:
+            return jsonify({'error': 'End date must be after start date'}), 400
+            
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    
+    # Check if API key is configured
+    import os
+    if not os.getenv('SPORTMONKS_API_KEY'):
+        # Return mock data if no API key
+        mock_fixtures = []
+        current_date = start_dt
+        fixture_id = 20000
+        
+        while current_date <= end_dt:
+            if current_date.weekday() in [5, 6]:  # Weekend fixtures
+                mock_fixtures.append({
+                    'id': fixture_id,
+                    'league_id': 501,
+                    'league': {'name': 'Premier League'},
+                    'round': 'Round X',
+                    'localteam_id': team_id if fixture_id % 2 == 0 else 502,
+                    'visitorteam_id': 502 if fixture_id % 2 == 0 else team_id,
+                    'localTeam': {'name': 'Home Team', 'logo_path': None},
+                    'visitorTeam': {'name': 'Away Team', 'logo_path': None},
+                    'starting_at': current_date.isoformat(),
+                    'venue': {'name': 'Stadium'},
+                    'status': 'NS' if current_date > datetime.now() else 'FT'
+                })
+                fixture_id += 1
+            current_date += timedelta(days=1)
+        
+        return jsonify({
+            'fixtures': mock_fixtures,
+            'count': len(mock_fixtures),
+            'is_mock_data': True,
+            'period': {
+                'start': start_date,
+                'end': end_date
+            }
+        }), 200
+    
+    # Get real data from SportMonks API
+    response = sportmonks_client.get(
+        f'fixtures/between/{start_date}/{end_date}/{team_id}',
+        include=include_params
+    )
+    
+    if not response or 'data' not in response:
+        return jsonify({'error': 'Failed to fetch fixtures between dates'}), 500
+    
+    fixtures = []
+    for fixture in response['data']:
+        fixtures.append({
+            'id': fixture['id'],
+            'league_id': fixture['league_id'],
+            'league': fixture.get('league', {}).get('data', {}) if 'league' in fixture else None,
+            'round': fixture.get('round'),
+            'stage_id': fixture.get('stage_id'),
+            'localteam_id': fixture['localteam_id'],
+            'visitorteam_id': fixture['visitorteam_id'],
+            'localTeam': fixture.get('localTeam', {}).get('data', {}) if 'localTeam' in fixture else None,
+            'visitorTeam': fixture.get('visitorTeam', {}).get('data', {}) if 'visitorTeam' in fixture else None,
+            'starting_at': fixture['time']['starting_at']['date_time'],
+            'venue': fixture.get('venue', {}).get('data', {}) if 'venue' in fixture else None,
+            'status': fixture['time']['status']
+        })
+    
+    return jsonify({
+        'fixtures': fixtures,
+        'count': len(fixtures),
+        'period': {
+            'start': start_date,
+            'end': end_date
+        }
+    }), 200

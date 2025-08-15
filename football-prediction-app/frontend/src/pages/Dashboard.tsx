@@ -183,7 +183,7 @@ const Dashboard: React.FC = () => {
                   </Typography>
                   <Typography variant="h3" fontWeight="bold">
                     {upcomingPredictions?.filter(p => 
-                      new Date(p.match_date).toDateString() === new Date().toDateString()
+                      new Date(p.match?.date || '').toDateString() === new Date().toDateString()
                     ).length || 0}
                   </Typography>
                 </Box>
