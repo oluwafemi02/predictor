@@ -1,0 +1,338 @@
+.advanced-predictions-container {
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.prediction-card {
+  border: none;
+  border-radius: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+}
+
+.prediction-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+.prediction-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 1.25rem;
+}
+
+.prediction-header h5 {
+  color: white;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.prediction-header .text-muted {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.confidence-score {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+}
+
+.prediction-summary {
+  background-color: #f7f7fc;
+  border: 1px solid #e3e6f0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.match-result-section,
+.goals-section,
+.markets-section,
+.value-bets-section {
+  margin-bottom: 1.5rem;
+}
+
+.match-result-section h6,
+.goals-section h6,
+.markets-section h6,
+.value-bets-section h6 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.probability-bars .progress {
+  height: 24px;
+  background-color: #e9ecef;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.probability-bars .progress-bar {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.prob-item {
+  margin-bottom: 0.75rem;
+}
+
+.prob-item span {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.predicted-score {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #667eea;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.market-item {
+  margin-bottom: 1rem;
+}
+
+.market-item small {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.market-item .progress {
+  height: 20px;
+}
+
+.value-bets-section .badge {
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
+
+/* Factors Breakdown */
+.factors-breakdown {
+  background-color: #f7fafc;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.factors-breakdown h6 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 1rem;
+}
+
+.factor-item {
+  margin-bottom: 1rem;
+}
+
+.factor-item small {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.factor-bar {
+  height: 16px;
+  background-color: transparent;
+  margin-top: 0.5rem;
+}
+
+.factor-bar .progress-bar:first-child {
+  background-color: #4299e1;
+}
+
+.factor-bar .progress-bar:last-child {
+  background-color: #f56565;
+}
+
+/* Filters Card */
+.advanced-predictions-container .card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.advanced-predictions-container .form-label {
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.advanced-predictions-container .form-control,
+.advanced-predictions-container .form-select {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+}
+
+.advanced-predictions-container .form-control:focus,
+.advanced-predictions-container .form-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Nav Tabs */
+.advanced-predictions-container .nav-tabs {
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.advanced-predictions-container .nav-tabs .nav-link {
+  border: none;
+  color: #718096;
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  margin-right: 1rem;
+  border-radius: 8px 8px 0 0;
+  transition: all 0.2s;
+}
+
+.advanced-predictions-container .nav-tabs .nav-link:hover {
+  color: #667eea;
+  background-color: #f7fafc;
+}
+
+.advanced-predictions-container .nav-tabs .nav-link.active {
+  color: #667eea;
+  background-color: white;
+  border-bottom: 3px solid #667eea;
+  margin-bottom: -2px;
+}
+
+/* Alerts */
+.advanced-predictions-container .alert {
+  border: none;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.advanced-predictions-container .alert-info {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.advanced-predictions-container .alert-danger {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+/* Pagination */
+.advanced-predictions-container .btn-outline-primary {
+  border-color: #667eea;
+  color: #667eea;
+  font-weight: 500;
+  padding: 0.5rem 1.5rem;
+  border-radius: 6px;
+}
+
+.advanced-predictions-container .btn-outline-primary:hover {
+  background-color: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+.advanced-predictions-container .btn-outline-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading State */
+.advanced-predictions-container .spinner-border {
+  width: 3rem;
+  height: 3rem;
+  border-width: 0.3rem;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .prediction-header {
+    padding: 1rem;
+  }
+  
+  .prediction-header h5 {
+    font-size: 1.1rem;
+  }
+  
+  .confidence-score {
+    font-size: 1.1rem;
+  }
+  
+  .predicted-score {
+    font-size: 2rem;
+  }
+  
+  .advanced-predictions-container .nav-tabs .nav-link {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    margin-right: 0.5rem;
+  }
+  
+  .factors-breakdown {
+    padding: 0.75rem;
+  }
+  
+  .factor-item {
+    font-size: 0.85rem;
+  }
+}
+
+/* Badge Styles */
+.badge {
+  font-weight: 500;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.badge.bg-success {
+  background-color: #10b981 !important;
+}
+
+.badge.bg-primary {
+  background-color: #667eea !important;
+}
+
+.badge.bg-info {
+  background-color: #0ea5e9 !important;
+}
+
+.badge.bg-warning {
+  background-color: #f59e0b !important;
+}
+
+.badge.bg-secondary {
+  background-color: #6b7280 !important;
+}
+
+/* Progress Bar Colors */
+.progress-bar.bg-success {
+  background-color: #10b981 !important;
+}
+
+.progress-bar.bg-primary {
+  background-color: #667eea !important;
+}
+
+.progress-bar.bg-info {
+  background-color: #0ea5e9 !important;
+}
+
+.progress-bar.bg-warning {
+  background-color: #f59e0b !important;
+}
+
+.progress-bar.bg-secondary {
+  background-color: #6b7280 !important;
+}

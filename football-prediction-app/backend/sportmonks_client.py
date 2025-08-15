@@ -605,6 +605,15 @@ class SportMonksAPIClient:
         
         return self._make_request(endpoint, {}, cache_ttl=3600)
     
+    def get_fixtures_between_dates(self, start_date: str, end_date: str, include: List[str] = None) -> Optional[Dict]:
+        """Get all fixtures between two dates"""
+        endpoint = f'fixtures/between/{start_date}/{end_date}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(endpoint, params, cache_ttl=600)
+    
     # Generic method for accessing any endpoint
     def get(self, endpoint: str, params: Dict = None, include: List[str] = None, cache_ttl: int = 300) -> Optional[Dict]:
         """

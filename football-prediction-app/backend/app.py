@@ -112,6 +112,14 @@ def create_app(config_name=None):
     except ImportError as e:
         print(f"Warning: Sync routes not available: {str(e)}")
     
+    # Register advanced predictions routes
+    try:
+        from routes.predictions_advanced import advanced_predictions_bp
+        app.register_blueprint(advanced_predictions_bp)
+        print("Advanced predictions routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: Advanced predictions routes not available: {str(e)}")
+    
     # Error handlers
     @app.errorhandler(ValidationError)
     def handle_validation_error(error):

@@ -1,9 +1,8 @@
 import React from 'react';
-import EnhancedPredictionsView from './EnhancedPredictionsView';
+import AdvancedPredictions from './AdvancedPredictions';
 
 const PredictionsView: React.FC = () => {
-  // Use the enhanced predictions view with AI-powered analysis
-  return <EnhancedPredictionsView />;
+  return <AdvancedPredictions />;
 };
 
 export default PredictionsView;
