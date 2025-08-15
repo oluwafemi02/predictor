@@ -1166,18 +1166,24 @@ from exceptions import DataNotFoundError
 @log_performance
 def get_match_details(match_id):
     """Get detailed information about a specific match"""
-    # Get match with all details
-    match = MatchService.get_match_with_details(match_id)
-    
-    if not match:
-        raise DataNotFoundError(f"Match with ID {match_id} not found", resource="match")
-    
-    # Calculate head to head stats
-    h2h_stats = MatchService.calculate_head_to_head(
-        match.home_team_id,
-        match.away_team_id,
-        match.id
-    )
+    try:
+        # Get match with all details
+        match = MatchService.get_match_with_details(match_id)
+        
+        if not match:
+            raise DataNotFoundError(f"Match with ID {match_id} not found", resource="match")
+        
+        # Calculate head to head stats
+        h2h_stats = MatchService.calculate_head_to_head(
+            match.home_team_id,
+            match.away_team_id,
+            match.id
+        )
+        
+        # Extract h2h variables
+        home_wins = h2h_stats.get('home_wins', 0)
+        away_wins = h2h_stats.get('away_wins', 0)
+        draws = h2h_stats.get('draws', 0)
         
         # Get recent form for both teams
         home_form = Match.query.filter(
@@ -1282,18 +1288,11 @@ def get_match_details(match_id):
                 'has_prediction': prediction is not None
             },
             'head_to_head': {
-                'total_matches': len(h2h_matches),
+                'total_matches': h2h_stats.get('total_matches', 0),
                 'home_wins': home_wins,
                 'away_wins': away_wins,
                 'draws': draws,
-                'last_5_results': [
-                    {
-                        'date': m.match_date.isoformat() if m.match_date else None,
-                        'home_team': m.home_team.name if m.home_team else 'Unknown',
-                        'away_team': m.away_team.name if m.away_team else 'Unknown',
-                        'score': f'{m.home_score}-{m.away_score}'
-                    } for m in h2h_matches[:5]
-                ]
+                'last_5_results': h2h_stats.get('last_5_results', [])
             },
             'prediction': prediction,
             'team_form': {
