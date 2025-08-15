@@ -327,7 +327,7 @@ const PredictionsView: React.FC = () => {
                         <div className="text-center text-muted">No prediction available.</div>
                       )}
                       <div className="probabilities">
-                        {winner && (
+                        {winner && prediction.predictions?.match_winner && (
                           <>
                             <div className="prob-item">
                               <span>Home Win</span>
