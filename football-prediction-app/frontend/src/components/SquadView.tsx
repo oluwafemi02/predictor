@@ -93,16 +93,39 @@ const SquadView: React.FC = () => {
     setError(null);
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/teams/${teamId}?include=squad,venue,league,stats`
+        `${process.env.REACT_APP_API_URL}/api/sportmonks/squad/${teamId}`
       );
-      console.log('Team data received:', response.data);
+      console.log('Squad data received:', response.data);
       
       if (response.data) {
-        setSelectedTeam(response.data);
+        const squadData = response.data;
+        
+        // Transform the data to match the expected format
+        const teamWithSquad: TeamWithSquad = {
+          id: squadData.team.id,
+          name: squadData.team.name,
+          short_code: squadData.team.short_code || '',
+          logo: squadData.team.logo,
+          founded: squadData.team.founded,
+          country: squadData.team.country || '',
+          venue: squadData.team.venue,
+          is_mock_data: squadData.is_mock_data,
+          squad: squadData.players.map((player: any) => ({
+            id: player.id,
+            name: player.name,
+            position: player.position || 'Unknown',
+            number: player.number,
+            nationality: player.nationality,
+            age: player.age,
+            image: player.photo
+          }))
+        };
+        
+        setSelectedTeam(teamWithSquad);
         
         // Check if squad data exists
-        if (!response.data.squad || response.data.squad.length === 0) {
-          console.warn('No squad data available for team:', response.data.name);
+        if (!squadData.players || squadData.players.length === 0) {
+          console.warn('No squad data available for team:', squadData.team.name);
         }
         
         setShowModal(true);

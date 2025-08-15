@@ -355,6 +355,7 @@ class SportMonksAPIClient:
     
     def get_fixtures_by_date_range(self, start_date: str, end_date: str, 
                                    league_ids: List[int] = None, 
+                                   team_id: int = None,
                                    include: List[str] = None) -> List[Dict]:
         """Get all fixtures within a date range"""
         all_fixtures = []
@@ -363,6 +364,8 @@ class SportMonksAPIClient:
         
         while current_date <= end:
             filters = {'date': current_date.strftime('%Y-%m-%d')}
+            if team_id:
+                filters['team_id'] = team_id
             if league_ids:
                 for league_id in league_ids:
                     filters['league_id'] = league_id
