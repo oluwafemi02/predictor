@@ -67,14 +67,28 @@ def cache_response(timeout=300):
         return decorated_function
     return decorator
 
-# Error handler decorator
+# Error handler decorator with response time logging
 def handle_errors(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        start_time = time.time()
         try:
-            return f(*args, **kwargs)
+            result = f(*args, **kwargs)
+            end_time = time.time()
+            response_time = end_time - start_time
+            logger.info(f"{f.__name__} completed in {response_time:.2f}s")
+            
+            # Add response time header
+            if isinstance(result, tuple) and len(result) == 2:
+                response, status_code = result
+                if hasattr(response, 'headers'):
+                    response.headers['X-Response-Time'] = f"{response_time:.3f}"
+            
+            return result
         except Exception as e:
-            logger.error(f"Error in {f.__name__}: {str(e)}", exc_info=True)
+            end_time = time.time()
+            response_time = end_time - start_time
+            logger.error(f"Error in {f.__name__}: {str(e)} (after {response_time:.2f}s)", exc_info=True)
             return jsonify({
                 'error': 'Internal server error',
                 'message': str(e)
@@ -271,6 +285,73 @@ def get_upcoming_fixtures():
         
         # Process fixtures and add predictions if requested
         processed_fixtures = []
+        
+        # First, extract fixture IDs for batch operations
+        fixture_ids = [f['id'] for f in fixtures if f.get('id')]
+        
+        # Fetch predictions in batch if requested (faster than one by one)
+        predictions_map = {}
+        if include_predictions and fixture_ids:
+            logger.info(f"Fetching predictions for {len(fixture_ids)} fixtures")
+            # Try to get predictions from database first
+            try:
+                # Check if we have recent predictions in the database
+                from sqlalchemy import and_
+                recent_predictions = SportMonksPrediction.query.filter(
+                    and_(
+                        SportMonksPrediction.fixture_id.in_(fixture_ids),
+                        SportMonksPrediction.updated_at > datetime.utcnow() - timedelta(hours=6)
+                    )
+                ).all()
+                
+                for pred in recent_predictions:
+                    predictions_map[pred.fixture_id] = {
+                        'match_winner': {
+                            'home_win': pred.home_win_percentage,
+                            'draw': pred.draw_percentage,
+                            'away_win': pred.away_win_percentage
+                        },
+                        'goals': {
+                            'over_25': pred.over_25_percentage,
+                            'under_25': pred.under_25_percentage,
+                            'btts_yes': pred.btts_yes_percentage,
+                            'btts_no': pred.btts_no_percentage
+                        },
+                        'correct_scores': pred.correct_scores or []
+                    }
+                
+                logger.info(f"Found {len(predictions_map)} predictions in database")
+                
+                # Get missing predictions from API
+                missing_ids = [fid for fid in fixture_ids if fid not in predictions_map]
+                if missing_ids:
+                    logger.info(f"Fetching {len(missing_ids)} missing predictions from API")
+                    # Batch API calls for missing predictions
+                    for fixture_id in missing_ids[:10]:  # Limit to 10 to avoid timeout
+                        try:
+                            prediction_response = sportmonks_client.get_predictions_by_fixture(fixture_id)
+                            if prediction_response and 'data' in prediction_response:
+                                prediction_data = prediction_response['data']
+                                predictions_map[fixture_id] = {
+                                    'match_winner': {
+                                        'home_win': prediction_data.get('predictions', {}).get('home', 0),
+                                        'draw': prediction_data.get('predictions', {}).get('draw', 0),
+                                        'away_win': prediction_data.get('predictions', {}).get('away', 0)
+                                    },
+                                    'goals': {
+                                        'over_25': prediction_data.get('predictions', {}).get('over_25', 0),
+                                        'under_25': prediction_data.get('predictions', {}).get('under_25', 0),
+                                        'btts_yes': prediction_data.get('predictions', {}).get('btts_yes', 0),
+                                        'btts_no': prediction_data.get('predictions', {}).get('btts_no', 0)
+                                    },
+                                    'correct_scores': prediction_data.get('predictions', {}).get('correct_scores', [])
+                                }
+                        except Exception as e:
+                            logger.warning(f"Failed to get predictions for fixture {fixture_id}: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error fetching predictions: {str(e)}")
+        
+        # Process fixtures with optimized data extraction
         for fixture_data in fixtures:
             fixture = {
                 'id': fixture_data['id'],
@@ -293,28 +374,9 @@ def get_upcoming_fixtures():
                 'venue': fixture_data.get('venue', {}).get('data', {}) if 'venue' in fixture_data else {}
             }
             
-            # Add predictions if requested
-            if include_predictions and fixture_data['id']:
-                try:
-                    prediction_response = sportmonks_client.get_predictions_by_fixture(fixture_data['id'])
-                    if prediction_response and 'data' in prediction_response:
-                        prediction_data = prediction_response['data']
-                        fixture['predictions'] = {
-                            'match_winner': {
-                                'home_win': prediction_data.get('predictions', {}).get('home', 0),
-                                'draw': prediction_data.get('predictions', {}).get('draw', 0),
-                                'away_win': prediction_data.get('predictions', {}).get('away', 0)
-                            },
-                            'goals': {
-                                'over_25': prediction_data.get('predictions', {}).get('over_25', 0),
-                                'under_25': prediction_data.get('predictions', {}).get('under_25', 0),
-                                'btts_yes': prediction_data.get('predictions', {}).get('btts_yes', 0),
-                                'btts_no': prediction_data.get('predictions', {}).get('btts_no', 0)
-                            },
-                            'correct_scores': prediction_data.get('predictions', {}).get('correct_scores', [])
-                        }
-                except Exception as e:
-                    logger.warning(f"Failed to get predictions for fixture {fixture_data['id']}: {str(e)}")
+            # Add predictions from our map if available
+            if include_predictions and fixture_data['id'] in predictions_map:
+                fixture['predictions'] = predictions_map[fixture_data['id']]
             
             processed_fixtures.append(fixture)
         
