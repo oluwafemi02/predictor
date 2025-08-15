@@ -58,7 +58,7 @@ class SportMonksAPIClient:
         
         # API configuration
         self.base_url = "https://api.sportmonks.com/v3/football"
-        self.timeout = 30
+        self.timeout = 15  # Reduced timeout to prevent 502 errors
         
         # Redis client for caching
         try:
@@ -358,28 +358,36 @@ class SportMonksAPIClient:
                                    team_id: int = None,
                                    include: List[str] = None) -> List[Dict]:
         """Get all fixtures within a date range"""
-        all_fixtures = []
-        current_date = datetime.strptime(start_date, '%Y-%m-%d')
-        end = datetime.strptime(end_date, '%Y-%m-%d')
+        # Use betweenDates filter for more efficient API call
+        params = {
+            'filter[betweenDates]': f'{start_date},{end_date}'
+        }
         
-        while current_date <= end:
-            filters = {'date': current_date.strftime('%Y-%m-%d')}
-            if team_id:
-                filters['team_id'] = team_id
-            if league_ids:
-                for league_id in league_ids:
-                    filters['league_id'] = league_id
-                    result = self.get_fixtures(include=include, filters=filters)
-                    if result and 'data' in result:
-                        all_fixtures.extend(result['data'])
-            else:
-                result = self.get_fixtures(date=current_date.strftime('%Y-%m-%d'), include=include)
+        if team_id:
+            params['filter[team_id]'] = team_id
+        
+        if league_ids and len(league_ids) == 1:
+            params['filter[league_id]'] = league_ids[0]
+        elif league_ids and len(league_ids) > 1:
+            # For multiple leagues, we need to make separate calls
+            all_fixtures = []
+            for league_id in league_ids:
+                params['filter[league_id]'] = league_id
+                result = self._make_request('fixtures', params, cache_ttl=600)
                 if result and 'data' in result:
                     all_fixtures.extend(result['data'])
-            
-            current_date += timedelta(days=1)
+            return all_fixtures
         
-        return all_fixtures
+        if include:
+            params['include'] = ','.join(include)
+        
+        # Make a single API call for the date range
+        result = self._make_request('fixtures', params, cache_ttl=600)
+        
+        if result and 'data' in result:
+            return result['data']
+        
+        return []
     
     def get_predictions_for_date(self, date: str) -> List[Dict]:
         """Get all predictions for fixtures on a specific date"""

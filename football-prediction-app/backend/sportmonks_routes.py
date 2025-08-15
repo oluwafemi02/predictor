@@ -89,10 +89,26 @@ def handle_errors(f):
             end_time = time.time()
             response_time = end_time - start_time
             logger.error(f"Error in {f.__name__}: {str(e)} (after {response_time:.2f}s)", exc_info=True)
+            
+            # Check if API key is missing
+            import os
+            if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+                return jsonify({
+                    'error': 'SportMonks API not configured',
+                    'message': 'API key is missing. Returning mock data.',
+                    'is_mock_data': True,
+                    'fixtures': [],
+                    'data': []
+                }), 200
+            
+            # Return a more graceful error response
             return jsonify({
-                'error': 'Internal server error',
-                'message': str(e)
-            }), 500
+                'error': 'Service temporarily unavailable',
+                'message': 'Unable to fetch data from SportMonks API',
+                'details': str(e),
+                'fixtures': [],
+                'data': []
+            }), 200  # Return 200 to avoid CORS issues
     return decorated_function
 
 # Add CORS test endpoint
