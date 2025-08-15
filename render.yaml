@@ -39,7 +39,7 @@ services:
       - key: ENABLE_SCHEDULER
         value: false  # Disabled on main API service
       - key: CORS_ORIGINS
-        value: https://football-prediction-frontend.onrender.com,https://football-prediction-frontend-zx5z.onrender.com
+        value: https://football-prediction-frontend.onrender.com,https://football-prediction-frontend-zx5z.onrender.com,https://football-prediction-frontend-2cvi.onrender.com
 
   # Scheduler Service (Background Worker)
   - type: worker

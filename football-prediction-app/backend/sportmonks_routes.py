@@ -20,14 +20,50 @@ sportmonks_bp = Blueprint('sportmonks', __name__, url_prefix='/api/sportmonks')
 # Initialize SportMonks client
 sportmonks_client = SportMonksAPIClient()
 
-# Cache decorator
+# Cache decorator with Redis support
 def cache_response(timeout=300):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # For now, just call the function
-            # In production, implement proper caching
-            return f(*args, **kwargs)
+            # Generate cache key from function name and arguments
+            cache_key = f"sportmonks:{f.__name__}"
+            
+            # Add request args to cache key
+            if request.args:
+                sorted_args = sorted(request.args.items())
+                args_str = "&".join([f"{k}={v}" for k, v in sorted_args])
+                cache_key = f"{cache_key}:{args_str}"
+            
+            # Try to get from cache
+            try:
+                import redis
+                import json
+                import os
+                
+                redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+                r = redis.from_url(redis_url, decode_responses=True)
+                
+                cached_data = r.get(cache_key)
+                if cached_data:
+                    logger.info(f"Cache hit for {cache_key}")
+                    return json.loads(cached_data), 200
+            except Exception as e:
+                logger.warning(f"Cache error: {e}, proceeding without cache")
+            
+            # Call the actual function
+            result = f(*args, **kwargs)
+            
+            # Cache the result if successful
+            if isinstance(result, tuple) and len(result) == 2 and result[1] == 200:
+                try:
+                    # Cache only successful responses
+                    response_data = result[0].get_json() if hasattr(result[0], 'get_json') else result[0]
+                    r.setex(cache_key, timeout, json.dumps(response_data))
+                    logger.info(f"Cached response for {cache_key} with timeout {timeout}s")
+                except Exception as e:
+                    logger.warning(f"Failed to cache response: {e}")
+            
+            return result
         return decorated_function
     return decorator
 
@@ -38,12 +74,23 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Error in {f.__name__}: {str(e)}")
+            logger.error(f"Error in {f.__name__}: {str(e)}", exc_info=True)
             return jsonify({
-                'error': 'An error occurred processing your request',
+                'error': 'Internal server error',
                 'message': str(e)
             }), 500
     return decorated_function
+
+# Add CORS test endpoint
+@sportmonks_bp.route('/test-cors', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def test_cors():
+    """Test endpoint to verify CORS is working"""
+    return jsonify({
+        'status': 'success',
+        'message': 'CORS is working correctly',
+        'timestamp': datetime.utcnow().isoformat()
+    }), 200
 
 # Routes
 
@@ -1041,3 +1088,151 @@ def get_team_fixtures_between_dates(start_date, end_date, team_id):
             'end': end_date
         }
     }), 200
+
+@sportmonks_bp.route('/squad/<int:team_id>', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=3600)  # Cache for 1 hour
+def get_team_squad(team_id):
+    """Get squad/players data for a specific team"""
+    try:
+        season_id = request.args.get('season_id')
+        
+        logger.info(f"Fetching squad data for team {team_id}")
+        
+        # Check if API key is configured
+        import os
+        if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+            logger.warning("No SportMonks API key configured, returning mock squad data")
+            # Return mock data for testing
+            mock_squad = {
+                'team': {
+                    'id': team_id,
+                    'name': 'Manchester United',
+                    'logo': 'https://via.placeholder.com/100'
+                },
+                'players': [
+                    {
+                        'id': 1,
+                        'name': 'Marcus Rashford',
+                        'position': 'Forward',
+                        'number': 10,
+                        'nationality': 'England',
+                        'age': 26,
+                        'photo': 'https://via.placeholder.com/50'
+                    },
+                    {
+                        'id': 2,
+                        'name': 'Bruno Fernandes',
+                        'position': 'Midfielder',
+                        'number': 8,
+                        'nationality': 'Portugal',
+                        'age': 29,
+                        'photo': 'https://via.placeholder.com/50'
+                    },
+                    {
+                        'id': 3,
+                        'name': 'Harry Maguire',
+                        'position': 'Defender',
+                        'number': 5,
+                        'nationality': 'England',
+                        'age': 31,
+                        'photo': 'https://via.placeholder.com/50'
+                    }
+                ],
+                'coach': {
+                    'id': 100,
+                    'name': 'Erik ten Hag',
+                    'nationality': 'Netherlands',
+                    'photo': 'https://via.placeholder.com/50'
+                },
+                'is_mock_data': True
+            }
+            return jsonify(mock_squad), 200
+        
+        # Get team data with squad
+        include_params = ['squad.player', 'coach']
+        if season_id:
+            include_params.append(f'squad:season:{season_id}')
+        
+        team_data = sportmonks_client.get_team_by_id(
+            team_id=team_id,
+            include=include_params
+        )
+        
+        if not team_data:
+            return jsonify({'error': 'Team not found'}), 404
+        
+        # Process squad data
+        squad_data = {
+            'team': {
+                'id': team_data.get('id'),
+                'name': team_data.get('name'),
+                'logo': team_data.get('logo_path'),
+                'founded': team_data.get('founded'),
+                'venue': team_data.get('venue', {}).get('data', {}) if 'venue' in team_data else None
+            },
+            'players': [],
+            'coach': None
+        }
+        
+        # Process players
+        if 'squad' in team_data and 'data' in team_data['squad']:
+            for squad_member in team_data['squad']['data']:
+                player_info = squad_member.get('player', {}).get('data', {}) if 'player' in squad_member else {}
+                player = {
+                    'id': player_info.get('id') or squad_member.get('player_id'),
+                    'name': player_info.get('display_name') or player_info.get('fullname') or 'Unknown',
+                    'position': squad_member.get('position', {}).get('data', {}).get('name') if isinstance(squad_member.get('position'), dict) else squad_member.get('position'),
+                    'number': squad_member.get('number'),
+                    'nationality': player_info.get('nationality'),
+                    'age': calculate_age(player_info.get('birthdate')) if player_info.get('birthdate') else None,
+                    'photo': player_info.get('image_path'),
+                    'injured': squad_member.get('injured', False),
+                    'minutes': squad_member.get('minutes', 0),
+                    'appearances': squad_member.get('appearences', 0),
+                    'goals': squad_member.get('goals', 0),
+                    'assists': squad_member.get('assists', 0)
+                }
+                squad_data['players'].append(player)
+        
+        # Process coach
+        if 'coach' in team_data and 'data' in team_data['coach']:
+            coach_info = team_data['coach']['data']
+            squad_data['coach'] = {
+                'id': coach_info.get('id'),
+                'name': coach_info.get('fullname') or coach_info.get('common_name'),
+                'nationality': coach_info.get('nationality'),
+                'photo': coach_info.get('image_path'),
+                'birthdate': coach_info.get('birthdate')
+            }
+        
+        # Sort players by position and number
+        position_order = {'Goalkeeper': 1, 'Defender': 2, 'Midfielder': 3, 'Forward': 4}
+        squad_data['players'].sort(key=lambda x: (
+            position_order.get(x.get('position', ''), 5),
+            x.get('number', 999)
+        ))
+        
+        logger.info(f"Retrieved squad with {len(squad_data['players'])} players for team {team_id}")
+        
+        return jsonify(squad_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching squad data: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to fetch squad data',
+            'message': str(e)
+        }), 500
+
+def calculate_age(birthdate_str):
+    """Calculate age from birthdate string"""
+    if not birthdate_str:
+        return None
+    try:
+        birthdate = datetime.strptime(birthdate_str, '%Y-%m-%d')
+        today = datetime.today()
+        age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+        return age
+    except:
+        return None
