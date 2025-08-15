@@ -96,6 +96,14 @@ def create_app(config_name=None):
     except ImportError as e:
         print(f"Warning: SportMonks routes not available: {str(e)}")
     
+    # Register enhanced predictions blueprint
+    try:
+        from enhanced_predictions_route import enhanced_predictions_bp
+        app.register_blueprint(enhanced_predictions_bp)
+        print("Enhanced predictions routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: Enhanced predictions routes not available: {str(e)}")
+    
     # Register sync routes
     try:
         from sync_routes import sync_bp

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Row, Col, ProgressBar, Button, Form } from 'react-bootstrap';
 import { Brain, Calendar, TrendingUp, Target, DollarSign, AlertCircle } from 'lucide-react';
 import axios from 'axios';
+import EnhancedPredictionsView from './EnhancedPredictionsView';
 import './PredictionsView.css';
 
 interface Prediction {
@@ -51,6 +52,7 @@ interface AllFixtures {
 }
 
 const PredictionsView: React.FC = () => {
+  const [showEnhanced, setShowEnhanced] = useState(true);
   const [allFixtures, setAllFixtures] = useState<AllFixtures>({ past: [], today: [], upcoming: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -418,6 +420,14 @@ const PredictionsView: React.FC = () => {
       )}
     </div>
   );
+
+  // Show enhanced predictions view if enabled
+  if (showEnhanced) {
+    return <EnhancedPredictionsView />;
+  }
+
+  // Otherwise show the simple fixtures view
+  return renderContent();
 };
 
 export default PredictionsView;
