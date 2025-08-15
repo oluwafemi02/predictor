@@ -1,412 +1,252 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Badge, Spinner, Row, Col, ProgressBar, Button, Form, Alert, ListGroup, Nav, Tab } from 'react-bootstrap';
-import { 
-  Brain, Calendar, TrendingUp, Target, DollarSign, AlertCircle, 
-  Award, Trophy, Shield, Activity, Users, Info, ChevronRight,
-  Star, TrendingDown, BarChart3
-} from 'lucide-react';
-import axios from 'axios';
+import { Card, Row, Col, Badge, ProgressBar, Spinner, Alert, Button, Form, Tab, Tabs } from 'react-bootstrap';
+import { api } from '../services/api';
 import './EnhancedPredictionsView.css';
 
 interface EnhancedPrediction {
   fixture_id: number;
-  home_team: string;
-  away_team: string;
-  date: string;
-  win_probability_home: number;
-  win_probability_away: number;
-  draw_probability: number;
-  confidence_level: 'high' | 'medium' | 'low';
-  prediction_factors: {
-    form_impact?: number;
-    h2h_pattern?: string;
-    injury_impact?: number;
-    motivation?: string;
+  fixture: {
+    home_team: string;
+    away_team: string;
+    date: string;
+    league?: string;
   };
-  prediction_summary: string;
-  recommended_bets: Array<{
+  prediction: {
+    match_result: {
+      home_win: number;
+      draw: number;
+      away_win: number;
+    };
+    goals: {
+      home: number;
+      away: number;
+      total: number;
+    };
+    btts: number;
+    over_25: number;
+  };
+  confidence: number;
+  summary: string;
+  recommended_bet?: {
     type: string;
     selection: string;
     probability: number;
-    confidence: string;
-    reasoning: string;
-  }>;
-  expected_goals: {
-    home: number;
-    away: number;
   };
-  btts_probability: number;
-  over_25_probability: number;
-  league?: string;
-}
-
-interface ValueBet {
-  fixture_id: number;
-  home_team: string;
-  away_team: string;
-  date: string;
-  bet_type: string;
-  team?: string;
-  probability: number;
-  confidence_level: string;
-  expected_goals?: {
-    home: number;
-    away: number;
-  };
-  recommended_bets?: Array<{
-    type: string;
-    selection: string;
-    probability: number;
-    confidence: string;
-    reasoning: string;
-  }>;
-  summary?: string;
-  league?: string;
 }
 
 const EnhancedPredictionsView: React.FC = () => {
   const [predictions, setPredictions] = useState<EnhancedPrediction[]>([]);
-  const [valueBets, setValueBets] = useState<ValueBet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDays, setSelectedDays] = useState(7);
-  const [selectedLeague, setSelectedLeague] = useState<string>('');
-  const [minConfidence, setMinConfidence] = useState<'low' | 'medium' | 'high'>('low');
-  const [activeTab, setActiveTab] = useState<'predictions' | 'valuebets'>('predictions');
+  const [selectedLeague, setSelectedLeague] = useState<number | null>(null);
+  const [minConfidence, setMinConfidence] = useState(50);
+  const [dateRange, setDateRange] = useState({
+    from: new Date().toISOString().split('T')[0],
+    to: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  });
+
+  useEffect(() => {
+    fetchEnhancedPredictions();
+  }, [selectedLeague, minConfidence, dateRange]);
 
   const fetchEnhancedPredictions = async () => {
-    setLoading(true);
-    setError(null);
     try {
-      const params = new URLSearchParams({
-        date_from: new Date().toISOString().split('T')[0],
-        date_to: new Date(Date.now() + selectedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        min_confidence: minConfidence
-      });
+      setLoading(true);
+      setError(null);
+      
+      const params = new URLSearchParams();
+      params.append('date_from', dateRange.from);
+      params.append('date_to', dateRange.to);
+      params.append('min_confidence', minConfidence.toString());
       
       if (selectedLeague) {
-        params.append('league_id', selectedLeague);
+        params.append('league_id', selectedLeague.toString());
       }
-
-      // Fetch enhanced predictions
-      const predictionsResponse = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/v1/predictions/enhanced?${params}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        }
-      );
       
-      if (predictionsResponse.data && predictionsResponse.data.predictions) {
-        setPredictions(predictionsResponse.data.predictions);
-      }
-
-      // Fetch value bets
-      const valueBetsResponse = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/v1/predictions/value-bets?${params}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        }
-      );
-      
-      if (valueBetsResponse.data && valueBetsResponse.data.value_bets) {
-        setValueBets(valueBetsResponse.data.value_bets);
-      }
-    } catch (err: any) {
+      const response = await api.get(`/api/v1/predictions/enhanced/upcoming?${params.toString()}`);
+      setPredictions(response.data.predictions || []);
+    } catch (err) {
       console.error('Error fetching enhanced predictions:', err);
-      setError('Failed to fetch enhanced predictions. Please try again later.');
+      setError('Failed to load enhanced predictions. Please try again later.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchEnhancedPredictions();
-  }, [selectedDays, selectedLeague, minConfidence]);
-
-  const getConfidenceBadge = (confidence: string) => {
-    switch (confidence) {
-      case 'high':
-        return <Badge bg="success"><Trophy size={14} className="me-1" />High Confidence</Badge>;
-      case 'medium':
-        return <Badge bg="warning"><Shield size={14} className="me-1" />Medium Confidence</Badge>;
-      default:
-        return <Badge bg="secondary"><Info size={14} className="me-1" />Low Confidence</Badge>;
-    }
+  const getConfidenceBadge = (confidence: number) => {
+    if (confidence >= 80) return <Badge bg="success">Very High</Badge>;
+    if (confidence >= 70) return <Badge bg="primary">High</Badge>;
+    if (confidence >= 60) return <Badge bg="info">Medium</Badge>;
+    if (confidence >= 50) return <Badge bg="warning">Low</Badge>;
+    return <Badge bg="secondary">Very Low</Badge>;
   };
 
-  const getProbabilityColor = (probability: number): string => {
+  const getProbabilityColor = (probability: number) => {
     if (probability >= 70) return 'success';
-    if (probability >= 55) return 'warning';
+    if (probability >= 60) return 'primary';
+    if (probability >= 50) return 'info';
+    if (probability >= 40) return 'warning';
     return 'danger';
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
+    return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(date);
+    });
+  };
+
+  const getOutcomeIcon = (type: string) => {
+    switch (type) {
+      case 'home': return '🏠';
+      case 'away': return '✈️';
+      case 'draw': return '🤝';
+      default: return '';
+    }
   };
 
   const renderPredictionCard = (prediction: EnhancedPrediction) => {
-    const maxProb = Math.max(
-      prediction.win_probability_home,
-      prediction.win_probability_away,
-      prediction.draw_probability
-    );
-    
-    let predictedOutcome = '';
-    let outcomeColor = '';
-    if (prediction.win_probability_home === maxProb) {
-      predictedOutcome = `${prediction.home_team} Win`;
-      outcomeColor = 'primary';
-    } else if (prediction.win_probability_away === maxProb) {
-      predictedOutcome = `${prediction.away_team} Win`;
-      outcomeColor = 'info';
-    } else {
-      predictedOutcome = 'Draw';
-      outcomeColor = 'warning';
-    }
+    const { match_result, goals, btts, over_25 } = prediction.prediction;
+    const maxProb = Math.max(match_result.home_win, match_result.draw, match_result.away_win);
+    const predictedOutcome = match_result.home_win === maxProb ? 'home' : 
+                           match_result.away_win === maxProb ? 'away' : 'draw';
 
     return (
-      <Col key={prediction.fixture_id} xl={6} className="mb-4">
-        <Card className="enhanced-prediction-card h-100 shadow">
-          <Card.Header className="d-flex justify-content-between align-items-center">
-            <div>
-              <h5 className="mb-1">{prediction.home_team} vs {prediction.away_team}</h5>
-              <small className="text-muted">{formatDate(prediction.date)}</small>
-              {prediction.league && <Badge bg="secondary" className="ms-2">{prediction.league}</Badge>}
+      <Card key={prediction.fixture_id} className="enhanced-prediction-card mb-4 shadow">
+        <Card.Header className="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 className="mb-1">
+              {prediction.fixture.home_team} vs {prediction.fixture.away_team}
+            </h5>
+            <small className="text-muted">{formatDate(prediction.fixture.date)}</small>
+            {prediction.fixture.league && (
+              <Badge bg="secondary" className="ms-2">{prediction.fixture.league}</Badge>
+            )}
+          </div>
+          <div className="text-end">
+            {getConfidenceBadge(prediction.confidence)}
+            <div className="confidence-score mt-1">
+              {prediction.confidence.toFixed(0)}%
             </div>
-            {getConfidenceBadge(prediction.confidence_level)}
-          </Card.Header>
-          
-          <Card.Body>
-            {/* Main Prediction */}
-            <div className="prediction-outcome mb-3 p-3 rounded bg-light">
-              <h6 className="mb-2 d-flex align-items-center">
-                <Brain size={18} className="me-2 text-primary" />
-                AI Prediction: <Badge bg={outcomeColor} className="ms-2">{predictedOutcome}</Badge>
-              </h6>
-              <p className="mb-0 text-muted small">{prediction.prediction_summary}</p>
-            </div>
+          </div>
+        </Card.Header>
+        
+        <Card.Body>
+          {/* Match Result Prediction */}
+          <div className="mb-4">
+            <h6 className="mb-3">Match Result Prediction</h6>
+            <Row>
+              <Col xs={4}>
+                <div className={`outcome-box ${predictedOutcome === 'home' ? 'predicted' : ''}`}>
+                  <div className="outcome-icon">{getOutcomeIcon('home')}</div>
+                  <div className="outcome-label">Home Win</div>
+                  <ProgressBar 
+                    now={match_result.home_win} 
+                    label={`${match_result.home_win.toFixed(1)}%`}
+                    variant={getProbabilityColor(match_result.home_win)}
+                  />
+                </div>
+              </Col>
+              <Col xs={4}>
+                <div className={`outcome-box ${predictedOutcome === 'draw' ? 'predicted' : ''}`}>
+                  <div className="outcome-icon">{getOutcomeIcon('draw')}</div>
+                  <div className="outcome-label">Draw</div>
+                  <ProgressBar 
+                    now={match_result.draw} 
+                    label={`${match_result.draw.toFixed(1)}%`}
+                    variant={getProbabilityColor(match_result.draw)}
+                  />
+                </div>
+              </Col>
+              <Col xs={4}>
+                <div className={`outcome-box ${predictedOutcome === 'away' ? 'predicted' : ''}`}>
+                  <div className="outcome-icon">{getOutcomeIcon('away')}</div>
+                  <div className="outcome-label">Away Win</div>
+                  <ProgressBar 
+                    now={match_result.away_win} 
+                    label={`${match_result.away_win.toFixed(1)}%`}
+                    variant={getProbabilityColor(match_result.away_win)}
+                  />
+                </div>
+              </Col>
+            </Row>
+          </div>
 
-            {/* Probabilities */}
-            <div className="probabilities-section mb-3">
-              <h6 className="mb-2">Match Outcome Probabilities</h6>
-              <div className="mb-2">
-                <div className="d-flex justify-content-between mb-1">
-                  <span>{prediction.home_team} Win</span>
-                  <span className="fw-bold">{prediction.win_probability_home}%</span>
-                </div>
-                <ProgressBar 
-                  now={prediction.win_probability_home} 
-                  variant={getProbabilityColor(prediction.win_probability_home)}
-                />
-              </div>
-              <div className="mb-2">
-                <div className="d-flex justify-content-between mb-1">
-                  <span>Draw</span>
-                  <span className="fw-bold">{prediction.draw_probability}%</span>
-                </div>
-                <ProgressBar 
-                  now={prediction.draw_probability} 
-                  variant={getProbabilityColor(prediction.draw_probability)}
-                />
-              </div>
-              <div className="mb-2">
-                <div className="d-flex justify-content-between mb-1">
-                  <span>{prediction.away_team} Win</span>
-                  <span className="fw-bold">{prediction.win_probability_away}%</span>
-                </div>
-                <ProgressBar 
-                  now={prediction.win_probability_away} 
-                  variant={getProbabilityColor(prediction.win_probability_away)}
-                />
-              </div>
-            </div>
-
-            {/* Goals Predictions */}
-            <Row className="mb-3">
+          {/* Goals Prediction */}
+          <div className="mb-4">
+            <h6 className="mb-3">Goals Prediction</h6>
+            <Row>
               <Col md={6}>
-                <div className="stat-box p-2 border rounded text-center">
-                  <Activity size={20} className="text-primary mb-1" />
-                  <div className="small text-muted">Expected Goals</div>
-                  <div className="fw-bold">
-                    {prediction.expected_goals.home.toFixed(1)} - {prediction.expected_goals.away.toFixed(1)}
+                <div className="goals-box">
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span>Expected Goals</span>
+                    <Badge bg="dark">{goals.total.toFixed(1)}</Badge>
+                  </div>
+                  <div className="score-prediction">
+                    <span className="team-score">{goals.home.toFixed(1)}</span>
+                    <span className="score-separator">-</span>
+                    <span className="team-score">{goals.away.toFixed(1)}</span>
                   </div>
                 </div>
               </Col>
               <Col md={6}>
-                <div className="stat-box p-2 border rounded text-center">
-                  <Target size={20} className="text-success mb-1" />
-                  <div className="small text-muted">Over 2.5 Goals</div>
-                  <div className="fw-bold">{prediction.over_25_probability}%</div>
+                <div className="stat-row">
+                  <span>Over 2.5 Goals</span>
+                  <ProgressBar 
+                    now={over_25} 
+                    label={`${over_25.toFixed(0)}%`}
+                    variant={getProbabilityColor(over_25)}
+                  />
+                </div>
+                <div className="stat-row mt-2">
+                  <span>Both Teams to Score</span>
+                  <ProgressBar 
+                    now={btts} 
+                    label={`${btts.toFixed(0)}%`}
+                    variant={getProbabilityColor(btts)}
+                  />
                 </div>
               </Col>
             </Row>
+          </div>
 
-            {/* Recommended Bets */}
-            {prediction.recommended_bets.length > 0 && (
-              <div className="recommended-bets">
-                <h6 className="mb-2 d-flex align-items-center">
-                  <Star size={18} className="me-2 text-warning" />
-                  Recommended Bets
-                </h6>
-                <ListGroup variant="flush">
-                  {prediction.recommended_bets.slice(0, 3).map((bet, index) => (
-                    <ListGroup.Item key={index} className="px-0 py-2">
-                      <div className="d-flex justify-content-between align-items-start">
-                        <div>
-                          <Badge bg={bet.confidence === 'high' ? 'success' : 'warning'} className="me-2">
-                            {bet.type}
-                          </Badge>
-                          <span className="fw-medium">{bet.selection}</span>
-                          <div className="small text-muted mt-1">{bet.reasoning}</div>
-                        </div>
-                        <Badge bg="light" text="dark">{bet.probability}%</Badge>
-                      </div>
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              </div>
-            )}
+          {/* AI Summary */}
+          <div className="mb-3">
+            <h6 className="mb-2">AI Analysis</h6>
+            <p className="prediction-summary">{prediction.summary}</p>
+          </div>
 
-            {/* Prediction Factors */}
-            {Object.keys(prediction.prediction_factors).length > 0 && (
-              <div className="prediction-factors mt-3 pt-3 border-top">
-                <h6 className="mb-2 small text-muted">Key Factors</h6>
-                <div className="d-flex flex-wrap gap-2">
-                  {prediction.prediction_factors.form_impact !== undefined && (
-                    <Badge bg="light" text="dark">
-                      Form Impact: {prediction.prediction_factors.form_impact > 0 ? '+' : ''}{prediction.prediction_factors.form_impact.toFixed(1)}
-                    </Badge>
-                  )}
-                  {prediction.prediction_factors.h2h_pattern && (
-                    <Badge bg="light" text="dark">
-                      H2H: {prediction.prediction_factors.h2h_pattern}
-                    </Badge>
-                  )}
-                  {prediction.prediction_factors.motivation && (
-                    <Badge bg="light" text="dark">
-                      {prediction.prediction_factors.motivation}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
-          </Card.Body>
-        </Card>
-      </Col>
+          {/* Recommended Bet */}
+          {prediction.recommended_bet && (
+            <div className="recommended-bet">
+              <Badge bg="success" className="me-2">Best Bet</Badge>
+              <strong>{prediction.recommended_bet.type}:</strong> {prediction.recommended_bet.selection}
+              <Badge bg="light" text="dark" className="ms-2">
+                {prediction.recommended_bet.probability.toFixed(1)}%
+              </Badge>
+            </div>
+          )}
+        </Card.Body>
+      </Card>
     );
   };
-
-  const renderValueBetCard = (bet: ValueBet) => {
-    return (
-      <Col key={`${bet.fixture_id}-${bet.bet_type}`} lg={4} md={6} className="mb-3">
-        <Card className="value-bet-card h-100 shadow-sm">
-          <Card.Body>
-            <div className="d-flex justify-content-between align-items-start mb-2">
-              <h6 className="mb-0">{bet.home_team} vs {bet.away_team}</h6>
-              {getConfidenceBadge(bet.confidence_level)}
-            </div>
-            
-            <div className="mb-2">
-              <small className="text-muted">{formatDate(bet.date)}</small>
-              {bet.league && <Badge bg="secondary" className="ms-2 small">{bet.league}</Badge>}
-            </div>
-
-            <div className="bet-recommendation p-3 rounded bg-light mb-2">
-              <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <Badge bg="primary" className="mb-1">{bet.bet_type}</Badge>
-                  {bet.team && bet.team !== 'Draw' && (
-                    <div className="fw-bold">{bet.team}</div>
-                  )}
-                </div>
-                <div className="text-end">
-                  <div className="h4 mb-0 text-success">{bet.probability}%</div>
-                  <small className="text-muted">Probability</small>
-                </div>
-              </div>
-            </div>
-
-            {bet.expected_goals && (
-              <div className="small text-muted">
-                Expected Score: {bet.expected_goals.home.toFixed(1)} - {bet.expected_goals.away.toFixed(1)}
-              </div>
-            )}
-
-            {bet.summary && (
-              <p className="small text-muted mt-2 mb-0">{bet.summary}</p>
-            )}
-          </Card.Body>
-        </Card>
-      </Col>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="text-center py-5">
-        <Spinner animation="border" variant="primary" />
-        <p className="mt-3">Analyzing fixtures with AI...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert variant="danger" className="m-3">
-        <AlertCircle size={20} className="me-2" />
-        {error}
-      </Alert>
-    );
-  }
 
   return (
     <div className="enhanced-predictions-container">
-      {/* Header */}
-      <div className="header-section mb-4">
-        <h2 className="d-flex align-items-center">
-          <Brain size={28} className="me-2 text-primary" />
-          AI-Powered Football Predictions
-        </h2>
-        <p className="text-muted">
-          Advanced predictions using team form, head-to-head history, injuries, and multiple data factors
-        </p>
-      </div>
-
       {/* Filters */}
-      <Card className="filter-card mb-4">
+      <Card className="mb-4 filter-card">
         <Card.Body>
-          <Row>
-            <Col md={4}>
-              <Form.Group>
-                <Form.Label>Time Period</Form.Label>
-                <Form.Select 
-                  value={selectedDays} 
-                  onChange={(e) => setSelectedDays(Number(e.target.value))}
-                >
-                  <option value={1}>Next 24 Hours</option>
-                  <option value={3}>Next 3 Days</option>
-                  <option value={7}>Next 7 Days</option>
-                  <option value={14}>Next 14 Days</option>
-                </Form.Select>
-              </Form.Group>
-            </Col>
-            <Col md={4}>
+          <Row className="align-items-end">
+            <Col md={3}>
               <Form.Group>
                 <Form.Label>League</Form.Label>
                 <Form.Select 
-                  value={selectedLeague} 
-                  onChange={(e) => setSelectedLeague(e.target.value)}
+                  value={selectedLeague || ''} 
+                  onChange={(e) => setSelectedLeague(e.target.value ? parseInt(e.target.value) : null)}
                 >
                   <option value="">All Leagues</option>
                   <option value="8">Premier League</option>
@@ -417,76 +257,78 @@ const EnhancedPredictionsView: React.FC = () => {
                 </Form.Select>
               </Form.Group>
             </Col>
-            <Col md={4}>
+            <Col md={3}>
               <Form.Group>
-                <Form.Label>Minimum Confidence</Form.Label>
-                <Form.Select 
-                  value={minConfidence} 
-                  onChange={(e) => setMinConfidence(e.target.value as 'low' | 'medium' | 'high')}
-                >
-                  <option value="low">All Predictions</option>
-                  <option value="medium">Medium & High</option>
-                  <option value="high">High Only</option>
-                </Form.Select>
+                <Form.Label>Min Confidence: {minConfidence}%</Form.Label>
+                <Form.Range 
+                  min="0" 
+                  max="100" 
+                  step="10"
+                  value={minConfidence}
+                  onChange={(e) => setMinConfidence(parseInt(e.target.value))}
+                />
+              </Form.Group>
+            </Col>
+            <Col md={3}>
+              <Form.Group>
+                <Form.Label>From Date</Form.Label>
+                <Form.Control 
+                  type="date" 
+                  value={dateRange.from}
+                  onChange={(e) => setDateRange({...dateRange, from: e.target.value})}
+                />
+              </Form.Group>
+            </Col>
+            <Col md={3}>
+              <Form.Group>
+                <Form.Label>To Date</Form.Label>
+                <Form.Control 
+                  type="date" 
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange({...dateRange, to: e.target.value})}
+                />
               </Form.Group>
             </Col>
           </Row>
         </Card.Body>
       </Card>
 
-      {/* Tab Navigation */}
-      <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k as 'predictions' | 'valuebets')}>
-        <Nav variant="pills" className="mb-4">
-          <Nav.Item>
-            <Nav.Link eventKey="predictions">
-              <BarChart3 size={18} className="me-2" />
-              All Predictions ({predictions.length})
-            </Nav.Link>
-          </Nav.Item>
-          <Nav.Item>
-            <Nav.Link eventKey="valuebets">
-              <Trophy size={18} className="me-2" />
-              Value Bets ({valueBets.length})
-            </Nav.Link>
-          </Nav.Item>
-        </Nav>
-
-        <Tab.Content>
-          {/* All Predictions Tab */}
-          <Tab.Pane eventKey="predictions">
-            {predictions.length === 0 ? (
-              <Alert variant="info">
-                <Info size={20} className="me-2" />
-                No predictions available for the selected criteria.
-              </Alert>
-            ) : (
-              <Row>
-                {predictions.map(renderPredictionCard)}
-              </Row>
-            )}
-          </Tab.Pane>
-
-          {/* Value Bets Tab */}
-          <Tab.Pane eventKey="valuebets">
-            {valueBets.length === 0 ? (
-              <Alert variant="info">
-                <Info size={20} className="me-2" />
-                No high-confidence value bets found for the selected period.
-              </Alert>
-            ) : (
-              <>
-                <Alert variant="success" className="mb-4">
-                  <Star size={20} className="me-2" />
-                  <strong>Value Bets:</strong> These are predictions with probability &gt;60% offering the best betting value.
-                </Alert>
-                <Row>
-                  {valueBets.map(renderValueBetCard)}
-                </Row>
-              </>
-            )}
-          </Tab.Pane>
-        </Tab.Content>
-      </Tab.Container>
+      {/* Content */}
+      {loading ? (
+        <div className="text-center py-5">
+          <Spinner animation="border" variant="primary" size="lg" />
+          <p className="mt-3">Loading enhanced predictions...</p>
+        </div>
+      ) : error ? (
+        <Alert variant="danger">{error}</Alert>
+      ) : predictions.length === 0 ? (
+        <Alert variant="info">
+          No predictions found matching your criteria. Try adjusting the filters.
+        </Alert>
+      ) : (
+        <div>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h5>Found {predictions.length} High-Confidence Predictions</h5>
+            <Button variant="outline-primary" size="sm" onClick={fetchEnhancedPredictions}>
+              Refresh
+            </Button>
+          </div>
+          
+          <Tabs defaultActiveKey="all" className="mb-4">
+            <Tab eventKey="all" title={`All (${predictions.length})`}>
+              {predictions.map(renderPredictionCard)}
+            </Tab>
+            <Tab eventKey="high-confidence" title={`High Confidence (${predictions.filter(p => p.confidence >= 70).length})`}>
+              {predictions.filter(p => p.confidence >= 70).map(renderPredictionCard)}
+            </Tab>
+            <Tab eventKey="value-bets" title={`Value Bets (${predictions.filter(p => p.recommended_bet && p.recommended_bet.probability >= 65).length})`}>
+              {predictions
+                .filter(p => p.recommended_bet && p.recommended_bet.probability >= 65)
+                .map(renderPredictionCard)}
+            </Tab>
+          </Tabs>
+        </div>
+      )}
     </div>
   );
 };

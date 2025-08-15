@@ -1,9 +1,13 @@
+"""
+Enhanced Prediction Engine for Football Matches
+Combines multiple data sources to generate AI-powered predictions
+"""
+
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-import logging
 from dataclasses import dataclass, field
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import json
 import statistics
 
 logger = logging.getLogger(__name__)
@@ -11,54 +15,47 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TeamForm:
     """Recent form data for a team"""
-    team_id: int
-    team_name: str
     last_5_results: List[str] = field(default_factory=list)  # W/D/L
     goals_scored: int = 0
     goals_conceded: int = 0
     clean_sheets: int = 0
     btts_count: int = 0
-    home_record: Dict[str, int] = field(default_factory=lambda: {"W": 0, "D": 0, "L": 0})
-    away_record: Dict[str, int] = field(default_factory=lambda: {"W": 0, "D": 0, "L": 0})
+    avg_goals_per_match: float = 0.0
     form_rating: float = 0.0  # 0-10 scale
 
 @dataclass
 class HeadToHeadStats:
-    """Head to head statistics between two teams"""
+    """Head-to-head statistics between two teams"""
     total_matches: int = 0
     home_wins: int = 0
     away_wins: int = 0
     draws: int = 0
-    total_goals: int = 0
     avg_goals_per_match: float = 0.0
     btts_percentage: float = 0.0
     over_25_percentage: float = 0.0
-    recent_results: List[Dict] = field(default_factory=list)
+    recent_meetings: List[Dict] = field(default_factory=list)
 
 @dataclass
 class InjuryReport:
     """Injury and suspension data for a team"""
-    team_id: int
-    injured_players: List[Dict] = field(default_factory=list)
-    suspended_players: List[Dict] = field(default_factory=list)
-    key_players_missing: List[str] = field(default_factory=list)
+    key_players_out: List[Dict] = field(default_factory=list)
+    total_injuries: int = 0
     impact_rating: float = 0.0  # 0-10 scale (10 = severe impact)
 
 @dataclass
-class StandingsContext:
-    """League standings and motivation context"""
-    home_position: int
-    away_position: int
-    home_points_from_top: int
-    away_points_from_top: int
-    home_points_from_relegation: int
-    away_points_from_relegation: int
-    home_motivation: str  # "title_race", "european_spots", "mid_table", "relegation_battle"
-    away_motivation: str
+class TeamMotivation:
+    """Motivation factors based on league position and objectives"""
+    league_position: int = 0
+    points_from_top: int = 0
+    points_from_relegation: int = 0
+    title_race: bool = False
+    relegation_battle: bool = False
+    european_spots_race: bool = False
+    motivation_score: float = 5.0  # 0-10 scale
 
 @dataclass
 class EnhancedPrediction:
-    """Enhanced prediction with all factors considered"""
+    """Complete enhanced prediction output"""
     fixture_id: int
     home_team: str
     away_team: str
@@ -66,33 +63,34 @@ class EnhancedPrediction:
     win_probability_home: float
     win_probability_away: float
     draw_probability: float
-    confidence_level: str  # "high", "medium", "low"
-    prediction_factors: Dict[str, float]
-    prediction_summary: str
-    recommended_bets: List[Dict[str, Any]]
-    expected_goals: Dict[str, float]
+    predicted_goals_home: float
+    predicted_goals_away: float
     btts_probability: float
     over_25_probability: float
-
+    confidence_score: float
+    prediction_summary: str
+    data_sources: Dict = field(default_factory=dict)
 
 class EnhancedPredictionEngine:
     """
-    Advanced prediction engine that combines multiple data sources
-    with weighted factors for accurate football match predictions
+    AI-powered prediction engine that combines multiple data sources
     """
+    
+    # Weights for different prediction factors (total = 100%)
+    WEIGHTS = {
+        'recent_form': 0.40,      # 40% - Recent team form & goals
+        'head_to_head': 0.20,     # 20% - H2H history
+        'injuries': 0.15,         # 15% - Injuries/suspensions impact
+        'home_advantage': 0.10,   # 10% - Home/away advantage
+        'motivation': 0.10,       # 10% - League standing & motivation
+        'other_factors': 0.05     # 5% - Weather, travel, etc.
+    }
     
     def __init__(self, sportmonks_client):
         self.client = sportmonks_client
-        self.weights = {
-            'recent_form': 0.40,
-            'head_to_head': 0.20,
-            'injuries': 0.15,
-            'home_advantage': 0.10,
-            'standings': 0.10,
-            'other_factors': 0.05
-        }
-        
-    def get_enhanced_prediction(self, fixture_id: int) -> Optional[EnhancedPrediction]:
+        self.executor = ThreadPoolExecutor(max_workers=10)
+    
+    def generate_prediction(self, fixture_id: int) -> Optional[EnhancedPrediction]:
         """
         Generate enhanced prediction for a fixture by aggregating multiple data sources
         """
@@ -105,42 +103,38 @@ class EnhancedPredictionEngine:
             home_team_id = fixture_data['home_team_id']
             away_team_id = fixture_data['away_team_id']
             
-            # Parallel data fetching for performance
-            with ThreadPoolExecutor(max_workers=6) as executor:
-                futures = {
-                    executor.submit(self._get_team_form, home_team_id, True): 'home_form',
-                    executor.submit(self._get_team_form, away_team_id, False): 'away_form',
-                    executor.submit(self._get_head_to_head_stats, home_team_id, away_team_id): 'h2h',
-                    executor.submit(self._get_injury_reports, home_team_id, away_team_id): 'injuries',
-                    executor.submit(self._get_standings_context, fixture_data['league_id'], 
-                                  home_team_id, away_team_id): 'standings',
-                    executor.submit(self._get_sportmonks_predictions, fixture_id): 'base_predictions'
-                }
-                
-                results = {}
-                for future in as_completed(futures):
-                    key = futures[future]
-                    try:
-                        results[key] = future.result()
-                    except Exception as e:
-                        logger.error(f"Error fetching {key}: {str(e)}")
-                        results[key] = None
+            # Fetch all data sources in parallel
+            futures = {
+                self.executor.submit(self._get_team_form, home_team_id, 'home'): 'home_form',
+                self.executor.submit(self._get_team_form, away_team_id, 'away'): 'away_form',
+                self.executor.submit(self._get_head_to_head, home_team_id, away_team_id): 'h2h',
+                self.executor.submit(self._get_injuries, home_team_id, 'home'): 'home_injuries',
+                self.executor.submit(self._get_injuries, away_team_id, 'away'): 'away_injuries',
+                self.executor.submit(self._get_team_motivation, home_team_id, fixture_data['league_id'], 'home'): 'home_motivation',
+                self.executor.submit(self._get_team_motivation, away_team_id, fixture_data['league_id'], 'away'): 'away_motivation',
+                self.executor.submit(self._get_sportmonks_prediction, fixture_id): 'sportmonks_pred'
+            }
+            
+            # Collect results
+            data_sources = {}
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    data_sources[key] = future.result()
+                except Exception as e:
+                    logger.error(f"Error fetching {key}: {str(e)}")
+                    data_sources[key] = None
             
             # Calculate weighted prediction
             prediction = self._calculate_weighted_prediction(
-                fixture_data=fixture_data,
-                home_form=results.get('home_form'),
-                away_form=results.get('away_form'),
-                h2h_stats=results.get('h2h'),
-                injuries=results.get('injuries'),
-                standings=results.get('standings'),
-                base_predictions=results.get('base_predictions')
+                fixture_data,
+                data_sources
             )
             
             return prediction
             
         except Exception as e:
-            logger.error(f"Error generating enhanced prediction: {str(e)}")
+            logger.error(f"Error generating prediction for fixture {fixture_id}: {str(e)}")
             return None
     
     def _get_fixture_details(self, fixture_id: int) -> Optional[Dict]:
@@ -166,99 +160,75 @@ class EnhancedPredictionEngine:
                 'venue_id': fixture.get('venue_id')
             }
         except Exception as e:
-            logger.error(f"Error getting fixture details: {str(e)}")
+            logger.error(f"Error fetching fixture details: {str(e)}")
             return None
     
-    def _get_team_form(self, team_id: int, is_home: bool) -> Optional[TeamForm]:
+    def _get_team_form(self, team_id: int, side: str) -> TeamForm:
         """Get recent form for a team"""
         try:
             # Get last 10 matches
-            today = datetime.utcnow()
-            end_date = today.strftime('%Y-%m-%d')
-            start_date = (today - timedelta(days=60)).strftime('%Y-%m-%d')
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=60)
             
-            fixtures = self.client.get_fixtures_by_date_range(
-                start_date=start_date,
-                end_date=end_date,
-                team_id=team_id,
-                include=['participants', 'scores', 'state']
+            response = self.client.get(
+                f'fixtures/between/{start_date.strftime("%Y-%m-%d")}/{end_date.strftime("%Y-%m-%d")}/{team_id}',
+                params={'include': 'participants;scores;state'}
             )
             
-            # Filter finished matches and sort by date
-            finished_fixtures = [f for f in fixtures if f.get('state_id') == 4]  # 4 = FT
-            finished_fixtures.sort(key=lambda x: x['starting_at'], reverse=True)
+            if not response or 'data' not in response:
+                return TeamForm()
             
-            # Take last 5 matches
-            recent_fixtures = finished_fixtures[:5]
+            fixtures = sorted(response['data'], key=lambda x: x['starting_at'], reverse=True)[:10]
             
-            form = TeamForm(team_id=team_id, team_name="")
-            
-            for fixture in recent_fixtures:
+            form = TeamForm()
+            for fixture in fixtures[:5]:  # Last 5 for form string
+                if fixture.get('state_id') != 5:  # Only finished matches
+                    continue
+                
                 participants = fixture.get('participants', [])
-                home_team = next((p for p in participants if p.get('meta', {}).get('location') == 'home'), {})
-                away_team = next((p for p in participants if p.get('meta', {}).get('location') == 'away'), {})
+                team_participant = next((p for p in participants if p['id'] == team_id), None)
+                if not team_participant:
+                    continue
                 
-                is_team_home = home_team.get('id') == team_id
-                
-                # Get scores
+                is_home = team_participant.get('meta', {}).get('location') == 'home'
                 scores = fixture.get('scores', [])
-                ft_score = next((s for s in scores if s.get('description') == 'CURRENT'), scores[0] if scores else {})
                 
-                home_goals = ft_score.get('score', {}).get('participant', {}).get('home', 0)
-                away_goals = ft_score.get('score', {}).get('participant', {}).get('away', 0)
-                
-                # Determine result
-                if is_team_home:
-                    team_goals = home_goals
-                    opponent_goals = away_goals
-                    form.team_name = home_team.get('name', '')
-                else:
-                    team_goals = away_goals
-                    opponent_goals = home_goals
-                    form.team_name = away_team.get('name', '')
-                
-                # Update form data
-                form.goals_scored += team_goals
-                form.goals_conceded += opponent_goals
-                
-                if team_goals > opponent_goals:
-                    result = 'W'
-                    if is_team_home:
-                        form.home_record['W'] += 1
+                if scores:
+                    score = scores[0].get('score', {}).get('participant', {})
+                    team_goals = score.get('home' if is_home else 'away', 0)
+                    opponent_goals = score.get('away' if is_home else 'home', 0)
+                    
+                    form.goals_scored += team_goals
+                    form.goals_conceded += opponent_goals
+                    
+                    if team_goals > opponent_goals:
+                        form.last_5_results.append('W')
+                    elif team_goals < opponent_goals:
+                        form.last_5_results.append('L')
                     else:
-                        form.away_record['W'] += 1
-                elif team_goals < opponent_goals:
-                    result = 'L'
-                    if is_team_home:
-                        form.home_record['L'] += 1
-                    else:
-                        form.away_record['L'] += 1
-                else:
-                    result = 'D'
-                    if is_team_home:
-                        form.home_record['D'] += 1
-                    else:
-                        form.away_record['D'] += 1
-                
-                form.last_5_results.append(result)
-                
-                if opponent_goals == 0:
-                    form.clean_sheets += 1
-                if home_goals > 0 and away_goals > 0:
-                    form.btts_count += 1
+                        form.last_5_results.append('D')
+                    
+                    if opponent_goals == 0:
+                        form.clean_sheets += 1
+                    if team_goals > 0 and opponent_goals > 0:
+                        form.btts_count += 1
             
-            # Calculate form rating
-            points = sum(3 if r == 'W' else 1 if r == 'D' else 0 for r in form.last_5_results)
-            form.form_rating = (points / 15.0) * 10  # Max 15 points possible, scale to 10
+            # Calculate metrics
+            matches_played = len(form.last_5_results)
+            if matches_played > 0:
+                form.avg_goals_per_match = form.goals_scored / matches_played
+                wins = form.last_5_results.count('W')
+                draws = form.last_5_results.count('D')
+                form.form_rating = (wins * 3 + draws) / (matches_played * 3) * 10
             
             return form
             
         except Exception as e:
-            logger.error(f"Error getting team form: {str(e)}")
-            return None
+            logger.error(f"Error fetching team form: {str(e)}")
+            return TeamForm()
     
-    def _get_head_to_head_stats(self, home_team_id: int, away_team_id: int) -> Optional[HeadToHeadStats]:
-        """Get head to head statistics"""
+    def _get_head_to_head(self, home_team_id: int, away_team_id: int) -> HeadToHeadStats:
+        """Get head-to-head statistics"""
         try:
             response = self.client.get(
                 f'fixtures/head-to-head/{home_team_id}/{away_team_id}',
@@ -266,531 +236,391 @@ class EnhancedPredictionEngine:
             )
             
             if not response or 'data' not in response:
-                return None
+                return HeadToHeadStats()
             
             h2h = HeadToHeadStats()
+            total_goals = 0
             
-            for fixture in response['data'][:10]:  # Last 10 H2H matches
-                if fixture.get('state_id') != 4:  # Only finished matches
+            for fixture in response['data'][:10]:  # Last 10 meetings
+                if fixture.get('state_id') != 5:  # Only finished matches
                     continue
                 
-                participants = fixture.get('participants', [])
-                home_team = next((p for p in participants if p.get('meta', {}).get('location') == 'home'), {})
-                away_team = next((p for p in participants if p.get('meta', {}).get('location') == 'away'), {})
-                
-                # Get scores
-                scores = fixture.get('scores', [])
-                ft_score = next((s for s in scores if s.get('description') == 'CURRENT'), scores[0] if scores else {})
-                
-                home_goals = ft_score.get('score', {}).get('participant', {}).get('home', 0)
-                away_goals = ft_score.get('score', {}).get('participant', {}).get('away', 0)
-                
                 h2h.total_matches += 1
-                h2h.total_goals += home_goals + away_goals
+                participants = fixture.get('participants', [])
+                home_in_fixture = next((p for p in participants if p.get('meta', {}).get('location') == 'home'), {})
                 
-                # Determine winner relative to our fixture's home team
-                if home_team.get('id') == home_team_id:
-                    if home_goals > away_goals:
-                        h2h.home_wins += 1
-                    elif away_goals > home_goals:
-                        h2h.away_wins += 1
+                scores = fixture.get('scores', [])
+                if scores:
+                    score = scores[0].get('score', {}).get('participant', {})
+                    home_goals = score.get('home', 0)
+                    away_goals = score.get('away', 0)
+                    
+                    total_goals += home_goals + away_goals
+                    
+                    if home_goals > 0 and away_goals > 0:
+                        h2h.btts_percentage += 1
+                    if home_goals + away_goals > 2.5:
+                        h2h.over_25_percentage += 1
+                    
+                    # Determine winner relative to our home team
+                    if home_in_fixture.get('id') == home_team_id:
+                        if home_goals > away_goals:
+                            h2h.home_wins += 1
+                        elif away_goals > home_goals:
+                            h2h.away_wins += 1
+                        else:
+                            h2h.draws += 1
                     else:
-                        h2h.draws += 1
-                else:
-                    if away_goals > home_goals:
-                        h2h.home_wins += 1
-                    elif home_goals > away_goals:
-                        h2h.away_wins += 1
-                    else:
-                        h2h.draws += 1
-                
-                if home_goals > 0 and away_goals > 0:
-                    h2h.btts_percentage += 1
-                if home_goals + away_goals > 2.5:
-                    h2h.over_25_percentage += 1
-                
-                h2h.recent_results.append({
-                    'date': fixture.get('starting_at'),
-                    'home_team': home_team.get('name'),
-                    'away_team': away_team.get('name'),
-                    'score': f"{home_goals}-{away_goals}"
-                })
+                        if away_goals > home_goals:
+                            h2h.home_wins += 1
+                        elif home_goals > away_goals:
+                            h2h.away_wins += 1
+                        else:
+                            h2h.draws += 1
+                    
+                    h2h.recent_meetings.append({
+                        'date': fixture.get('starting_at'),
+                        'home_team': home_in_fixture.get('name'),
+                        'score': f"{home_goals}-{away_goals}"
+                    })
             
             if h2h.total_matches > 0:
-                h2h.avg_goals_per_match = h2h.total_goals / h2h.total_matches
+                h2h.avg_goals_per_match = total_goals / h2h.total_matches
                 h2h.btts_percentage = (h2h.btts_percentage / h2h.total_matches) * 100
                 h2h.over_25_percentage = (h2h.over_25_percentage / h2h.total_matches) * 100
             
             return h2h
             
         except Exception as e:
-            logger.error(f"Error getting H2H stats: {str(e)}")
-            return None
+            logger.error(f"Error fetching H2H data: {str(e)}")
+            return HeadToHeadStats()
     
-    def _get_injury_reports(self, home_team_id: int, away_team_id: int) -> Optional[Dict[str, InjuryReport]]:
-        """Get injury and suspension reports for both teams"""
+    def _get_injuries(self, team_id: int, side: str) -> InjuryReport:
+        """Get injury and suspension data"""
         try:
-            reports = {}
+            response = self.client.get(
+                f'injuries/teams/{team_id}',
+                params={'include': 'player'}
+            )
             
-            for team_id, key in [(home_team_id, 'home'), (away_team_id, 'away')]:
-                response = self.client.get(
-                    f'injuries/teams/{team_id}',
-                    params={'include': 'player'}
-                )
-                
-                if response and 'data' in response:
-                    report = InjuryReport(team_id=team_id)
-                    
-                    for injury in response['data']:
-                        player = injury.get('player', {})
-                        injury_data = {
-                            'player_name': player.get('display_name', 'Unknown'),
-                            'position': player.get('position', {}).get('name', 'Unknown'),
-                            'reason': injury.get('reason', 'Unknown'),
-                            'return_date': injury.get('return_date')
-                        }
-                        
-                        if injury.get('type') == 'injury':
-                            report.injured_players.append(injury_data)
-                        else:
-                            report.suspended_players.append(injury_data)
-                        
-                        # Check if key player (simplified logic)
-                        if player.get('position', {}).get('name') in ['Forward', 'Midfielder'] and \
-                           player.get('market_value', 0) > 10000000:
-                            report.key_players_missing.append(player.get('display_name'))
-                    
-                    # Calculate impact rating
-                    total_missing = len(report.injured_players) + len(report.suspended_players)
-                    key_missing = len(report.key_players_missing)
-                    report.impact_rating = min(10, total_missing * 1.5 + key_missing * 3)
-                    
-                    reports[key] = report
-                else:
-                    reports[key] = InjuryReport(team_id=team_id)
+            if not response or 'data' not in response:
+                return InjuryReport()
             
-            return reports
+            report = InjuryReport()
+            
+            for injury in response['data']:
+                player = injury.get('player', {})
+                if player.get('position', {}).get('name') in ['Goalkeeper', 'Defender', 'Midfielder', 'Forward']:
+                    report.key_players_out.append({
+                        'name': player.get('display_name', 'Unknown'),
+                        'position': player.get('position', {}).get('name'),
+                        'reason': injury.get('reason', 'Unknown'),
+                        'return_date': injury.get('return_date')
+                    })
+                    report.total_injuries += 1
+            
+            # Calculate impact rating based on number and importance of injuries
+            if report.total_injuries == 0:
+                report.impact_rating = 0.0
+            elif report.total_injuries <= 2:
+                report.impact_rating = 2.5
+            elif report.total_injuries <= 4:
+                report.impact_rating = 5.0
+            else:
+                report.impact_rating = min(7.5, 2.5 + report.total_injuries)
+            
+            return report
             
         except Exception as e:
-            logger.error(f"Error getting injury reports: {str(e)}")
-            return None
+            logger.error(f"Error fetching injuries: {str(e)}")
+            return InjuryReport()
     
-    def _get_standings_context(self, league_id: int, home_team_id: int, 
-                              away_team_id: int) -> Optional[StandingsContext]:
-        """Get league standings and motivation context"""
+    def _get_team_motivation(self, team_id: int, league_id: int, side: str) -> TeamMotivation:
+        """Get team motivation based on league position"""
         try:
             # Get current season
             season_id = self.client.get_current_season_id(league_id)
             if not season_id:
-                return None
+                return TeamMotivation()
             
-            response = self.client.get_standings(season_id, include=['participant'])
-            if not response or 'data' not in response:
-                return None
-            
-            standings = response['data']
-            home_standing = next((s for s in standings if s.get('participant_id') == home_team_id), None)
-            away_standing = next((s for s in standings if s.get('participant_id') == away_team_id), None)
-            
-            if not home_standing or not away_standing:
-                return None
-            
-            total_teams = len(standings)
-            
-            context = StandingsContext(
-                home_position=home_standing.get('position', 0),
-                away_position=away_standing.get('position', 0),
-                home_points_from_top=standings[0].get('points', 0) - home_standing.get('points', 0),
-                away_points_from_top=standings[0].get('points', 0) - away_standing.get('points', 0),
-                home_points_from_relegation=home_standing.get('points', 0) - standings[-3].get('points', 0),
-                away_points_from_relegation=away_standing.get('points', 0) - standings[-3].get('points', 0),
-                home_motivation=self._determine_motivation(home_standing.get('position', 0), total_teams),
-                away_motivation=self._determine_motivation(away_standing.get('position', 0), total_teams)
+            # Get standings
+            response = self.client.get(
+                f'standings/seasons/{season_id}',
+                params={'include': 'participant'}
             )
             
-            return context
+            if not response or 'data' not in response:
+                return TeamMotivation()
+            
+            standings = response['data']
+            team_standing = next((s for s in standings if s.get('participant_id') == team_id), None)
+            
+            if not team_standing:
+                return TeamMotivation()
+            
+            motivation = TeamMotivation()
+            motivation.league_position = team_standing.get('position', 0)
+            total_teams = len(standings)
+            
+            # Calculate points from top and relegation
+            if motivation.league_position > 0:
+                leader = standings[0]
+                motivation.points_from_top = leader.get('points', 0) - team_standing.get('points', 0)
+                
+                if total_teams > 3:
+                    relegation_position = total_teams - 2  # Usually 18th in 20-team league
+                    if motivation.league_position < relegation_position:
+                        relegation_team = standings[relegation_position - 1]
+                        motivation.points_from_relegation = team_standing.get('points', 0) - relegation_team.get('points', 0)
+            
+            # Determine motivation factors
+            if motivation.league_position <= 6 and motivation.points_from_top <= 10:
+                motivation.title_race = True
+                motivation.motivation_score = 9.0
+            elif motivation.league_position <= 7:
+                motivation.european_spots_race = True
+                motivation.motivation_score = 7.5
+            elif motivation.points_from_relegation <= 6:
+                motivation.relegation_battle = True
+                motivation.motivation_score = 8.5
+            else:
+                motivation.motivation_score = 5.0  # Mid-table
+            
+            return motivation
             
         except Exception as e:
-            logger.error(f"Error getting standings context: {str(e)}")
-            return None
+            logger.error(f"Error fetching motivation data: {str(e)}")
+            return TeamMotivation()
     
-    def _determine_motivation(self, position: int, total_teams: int) -> str:
-        """Determine team motivation based on league position"""
-        if position <= 2:
-            return "title_race"
-        elif position <= 6:
-            return "european_spots"
-        elif position >= total_teams - 2:
-            return "relegation_battle"
-        else:
-            return "mid_table"
-    
-    def _get_sportmonks_predictions(self, fixture_id: int) -> Optional[Dict]:
-        """Get base predictions from SportMonks"""
+    def _get_sportmonks_prediction(self, fixture_id: int) -> Optional[Dict]:
+        """Get SportMonks native prediction if available"""
         try:
             response = self.client.get_fixture_with_predictions(fixture_id)
             if not response or 'data' not in response:
                 return None
             
-            predictions_list = response['data'].get('predictions', [])
+            predictions = response['data'].get('predictions', [])
+            parsed = {}
             
-            base_predictions = {
-                'match_winner': {'home': 33.33, 'draw': 33.33, 'away': 33.33},
-                'btts': {'yes': 50, 'no': 50},
-                'over_25': {'yes': 50, 'no': 50}
-            }
-            
-            for pred in predictions_list:
+            for pred in predictions:
                 pred_type = pred.get('type', {}).get('code', '')
-                predictions = pred.get('predictions', {})
+                predictions_data = pred.get('predictions', {})
                 
                 if pred_type == 'fulltime-result-probability':
-                    base_predictions['match_winner'] = {
-                        'home': predictions.get('home', 33.33),
-                        'draw': predictions.get('draw', 33.33),
-                        'away': predictions.get('away', 33.33)
+                    parsed['match_winner'] = {
+                        'home': predictions_data.get('home', 0),
+                        'draw': predictions_data.get('draw', 0),
+                        'away': predictions_data.get('away', 0)
                     }
                 elif pred_type == 'both-teams-to-score-probability':
-                    base_predictions['btts'] = {
-                        'yes': predictions.get('yes', 50),
-                        'no': predictions.get('no', 50)
-                    }
+                    parsed['btts'] = predictions_data.get('yes', 0)
                 elif pred_type == 'over-under-2_5-probability':
-                    base_predictions['over_25'] = {
-                        'yes': predictions.get('yes', 50),
-                        'no': predictions.get('no', 50)
-                    }
+                    parsed['over_25'] = predictions_data.get('yes', 0)
             
-            return base_predictions
+            return parsed
             
         except Exception as e:
-            logger.error(f"Error getting SportMonks predictions: {str(e)}")
+            logger.error(f"Error fetching SportMonks prediction: {str(e)}")
             return None
     
-    def _calculate_weighted_prediction(self, fixture_data: Dict, home_form: Optional[TeamForm],
-                                     away_form: Optional[TeamForm], h2h_stats: Optional[HeadToHeadStats],
-                                     injuries: Optional[Dict], standings: Optional[StandingsContext],
-                                     base_predictions: Optional[Dict]) -> EnhancedPrediction:
-        """Calculate final weighted prediction based on all factors"""
+    def _calculate_weighted_prediction(self, fixture_data: Dict, data_sources: Dict) -> EnhancedPrediction:
+        """Calculate final prediction using weighted factors"""
         
         # Initialize base probabilities
-        if base_predictions:
-            home_prob = base_predictions['match_winner']['home']
-            draw_prob = base_predictions['match_winner']['draw']
-            away_prob = base_predictions['match_winner']['away']
-            btts_prob = base_predictions['btts']['yes']
-            over_25_prob = base_predictions['over_25']['yes']
-        else:
-            home_prob = 40.0  # Default home advantage
-            draw_prob = 28.0
-            away_prob = 32.0
-            btts_prob = 52.0
-            over_25_prob = 51.0
+        home_win_prob = 33.33
+        draw_prob = 33.33
+        away_win_prob = 33.34
         
-        prediction_factors = {}
-        adjustments = {'home': 0, 'draw': 0, 'away': 0}
+        # 1. Recent Form Analysis (40%)
+        home_form = data_sources.get('home_form', TeamForm())
+        away_form = data_sources.get('away_form', TeamForm())
         
-        # Factor 1: Recent Form (40%)
-        if home_form and away_form:
-            form_diff = home_form.form_rating - away_form.form_rating
-            form_adjustment = form_diff * 2  # Scale adjustment
-            
-            if form_diff > 0:
-                adjustments['home'] += form_adjustment * self.weights['recent_form']
-                adjustments['away'] -= form_adjustment * self.weights['recent_form'] * 0.7
-                adjustments['draw'] -= form_adjustment * self.weights['recent_form'] * 0.3
-            else:
-                adjustments['away'] += abs(form_adjustment) * self.weights['recent_form']
-                adjustments['home'] -= abs(form_adjustment) * self.weights['recent_form'] * 0.7
-                adjustments['draw'] -= abs(form_adjustment) * self.weights['recent_form'] * 0.3
-            
-            prediction_factors['form_impact'] = form_diff
-            
-            # Goal expectations
-            home_goals_avg = home_form.goals_scored / len(home_form.last_5_results) if home_form.last_5_results else 1.5
-            away_goals_avg = away_form.goals_scored / len(away_form.last_5_results) if away_form.last_5_results else 1.2
-            
-            # BTTS adjustment
-            home_btts_rate = home_form.btts_count / len(home_form.last_5_results) if home_form.last_5_results else 0.5
-            away_btts_rate = away_form.btts_count / len(away_form.last_5_results) if away_form.last_5_results else 0.5
-            btts_prob = btts_prob * 0.5 + (home_btts_rate + away_btts_rate) * 25
-            
-            # Over 2.5 adjustment
-            total_expected = home_goals_avg + away_goals_avg
-            if total_expected > 2.5:
-                over_25_prob = min(85, over_25_prob + (total_expected - 2.5) * 15)
-            else:
-                over_25_prob = max(15, over_25_prob - (2.5 - total_expected) * 15)
+        form_diff = home_form.form_rating - away_form.form_rating
+        form_home_advantage = self._normalize_to_probability(form_diff, -5, 5)
         
-        # Factor 2: Head to Head (20%)
-        if h2h_stats and h2h_stats.total_matches >= 3:
-            h2h_home_rate = h2h_stats.home_wins / h2h_stats.total_matches
-            h2h_away_rate = h2h_stats.away_wins / h2h_stats.total_matches
-            h2h_draw_rate = h2h_stats.draws / h2h_stats.total_matches
-            
-            adjustments['home'] += (h2h_home_rate - 0.4) * 20 * self.weights['head_to_head']
-            adjustments['away'] += (h2h_away_rate - 0.3) * 20 * self.weights['head_to_head']
-            adjustments['draw'] += (h2h_draw_rate - 0.3) * 20 * self.weights['head_to_head']
-            
-            prediction_factors['h2h_pattern'] = f"H{h2h_stats.home_wins}-D{h2h_stats.draws}-A{h2h_stats.away_wins}"
-            
-            # Historical goal patterns
-            btts_prob = btts_prob * 0.7 + h2h_stats.btts_percentage * 0.3
-            over_25_prob = over_25_prob * 0.7 + h2h_stats.over_25_percentage * 0.3
+        home_win_prob += form_home_advantage * self.WEIGHTS['recent_form'] * 100
+        away_win_prob -= form_home_advantage * self.WEIGHTS['recent_form'] * 100
         
-        # Factor 3: Injuries (15%)
-        if injuries:
-            home_injury = injuries.get('home', InjuryReport(team_id=fixture_data['home_team_id']))
-            away_injury = injuries.get('away', InjuryReport(team_id=fixture_data['away_team_id']))
+        # 2. Head-to-Head Analysis (20%)
+        h2h = data_sources.get('h2h', HeadToHeadStats())
+        if h2h.total_matches > 0:
+            h2h_home_rate = h2h.home_wins / h2h.total_matches
+            h2h_away_rate = h2h.away_wins / h2h.total_matches
+            h2h_draw_rate = h2h.draws / h2h.total_matches
             
-            injury_diff = away_injury.impact_rating - home_injury.impact_rating
-            
-            if injury_diff > 0:  # Away team more affected
-                adjustments['home'] += injury_diff * self.weights['injuries']
-                adjustments['away'] -= injury_diff * self.weights['injuries']
-            else:  # Home team more affected
-                adjustments['away'] += abs(injury_diff) * self.weights['injuries']
-                adjustments['home'] -= abs(injury_diff) * self.weights['injuries']
-            
-            prediction_factors['injury_impact'] = injury_diff
+            home_win_prob += (h2h_home_rate - 0.33) * self.WEIGHTS['head_to_head'] * 100
+            away_win_prob += (h2h_away_rate - 0.33) * self.WEIGHTS['head_to_head'] * 100
+            draw_prob += (h2h_draw_rate - 0.33) * self.WEIGHTS['head_to_head'] * 100
         
-        # Factor 4: Home Advantage (10%)
-        adjustments['home'] += 5 * self.weights['home_advantage']
-        adjustments['away'] -= 3 * self.weights['home_advantage']
-        adjustments['draw'] -= 2 * self.weights['home_advantage']
+        # 3. Injuries Impact (15%)
+        home_injuries = data_sources.get('home_injuries', InjuryReport())
+        away_injuries = data_sources.get('away_injuries', InjuryReport())
         
-        # Factor 5: League Standing & Motivation (10%)
-        if standings:
-            motivation_values = {
-                'title_race': 3,
-                'european_spots': 2,
-                'relegation_battle': 2.5,
-                'mid_table': 0
-            }
-            
-            home_motivation = motivation_values.get(standings.home_motivation, 0)
-            away_motivation = motivation_values.get(standings.away_motivation, 0)
-            
-            motivation_diff = home_motivation - away_motivation
-            
-            if motivation_diff > 0:
-                adjustments['home'] += motivation_diff * self.weights['standings']
-                adjustments['away'] -= motivation_diff * self.weights['standings'] * 0.7
-            else:
-                adjustments['away'] += abs(motivation_diff) * self.weights['standings']
-                adjustments['home'] -= abs(motivation_diff) * self.weights['standings'] * 0.7
-            
-            prediction_factors['motivation'] = f"H:{standings.home_motivation}, A:{standings.away_motivation}"
+        injury_impact = (away_injuries.impact_rating - home_injuries.impact_rating) / 10
+        home_win_prob += injury_impact * self.WEIGHTS['injuries'] * 100
+        away_win_prob -= injury_impact * self.WEIGHTS['injuries'] * 100
         
-        # Apply adjustments
-        home_prob += adjustments['home']
-        draw_prob += adjustments['draw']
-        away_prob += adjustments['away']
+        # 4. Home Advantage (10%)
+        home_win_prob += self.WEIGHTS['home_advantage'] * 100 * 0.6  # 60% of weight to home
+        draw_prob += self.WEIGHTS['home_advantage'] * 100 * 0.2      # 20% to draw
+        away_win_prob += self.WEIGHTS['home_advantage'] * 100 * 0.2  # 20% to away
+        
+        # 5. Motivation (10%)
+        home_motivation = data_sources.get('home_motivation', TeamMotivation())
+        away_motivation = data_sources.get('away_motivation', TeamMotivation())
+        
+        motivation_diff = (home_motivation.motivation_score - away_motivation.motivation_score) / 10
+        home_win_prob += motivation_diff * self.WEIGHTS['motivation'] * 100
+        away_win_prob -= motivation_diff * self.WEIGHTS['motivation'] * 100
+        
+        # 6. Blend with SportMonks prediction if available (5%)
+        sportmonks = data_sources.get('sportmonks_pred', {})
+        if sportmonks and 'match_winner' in sportmonks:
+            sm_weight = self.WEIGHTS['other_factors']
+            home_win_prob = home_win_prob * (1 - sm_weight) + sportmonks['match_winner']['home'] * sm_weight
+            draw_prob = draw_prob * (1 - sm_weight) + sportmonks['match_winner']['draw'] * sm_weight
+            away_win_prob = away_win_prob * (1 - sm_weight) + sportmonks['match_winner']['away'] * sm_weight
         
         # Normalize probabilities
-        total = home_prob + draw_prob + away_prob
-        home_prob = round((home_prob / total) * 100, 2)
-        draw_prob = round((draw_prob / total) * 100, 2)
-        away_prob = round((away_prob / total) * 100, 2)
+        total_prob = home_win_prob + draw_prob + away_win_prob
+        home_win_prob = (home_win_prob / total_prob) * 100
+        draw_prob = (draw_prob / total_prob) * 100
+        away_win_prob = (away_win_prob / total_prob) * 100
         
-        # Ensure they sum to 100
-        diff = 100 - (home_prob + draw_prob + away_prob)
-        home_prob += diff
+        # Calculate expected goals
+        home_expected_goals = home_form.avg_goals_per_match * 0.6 + (h2h.avg_goals_per_match / 2) * 0.4
+        away_expected_goals = away_form.avg_goals_per_match * 0.6 + (h2h.avg_goals_per_match / 2) * 0.4
         
-        # Determine confidence level
-        max_prob = max(home_prob, draw_prob, away_prob)
-        if max_prob > 55:
-            confidence = "high"
-        elif max_prob > 45:
-            confidence = "medium"
-        else:
-            confidence = "low"
+        # BTTS and Over 2.5 probabilities
+        btts_prob = min(90, (home_form.btts_count / max(1, len(home_form.last_5_results)) * 50 +
+                            away_form.btts_count / max(1, len(away_form.last_5_results)) * 50))
         
-        # Generate prediction summary
-        prediction_summary = self._generate_prediction_summary(
-            fixture_data, home_prob, draw_prob, away_prob,
-            home_form, away_form, h2h_stats, injuries, standings
+        if sportmonks and 'btts' in sportmonks:
+            btts_prob = btts_prob * 0.7 + sportmonks['btts'] * 0.3
+        
+        over_25_prob = self._calculate_over_25_probability(home_expected_goals, away_expected_goals)
+        if sportmonks and 'over_25' in sportmonks:
+            over_25_prob = over_25_prob * 0.7 + sportmonks['over_25'] * 0.3
+        
+        # Calculate confidence score
+        confidence = self._calculate_confidence_score(
+            max(home_win_prob, draw_prob, away_win_prob),
+            h2h.total_matches,
+            len(home_form.last_5_results) + len(away_form.last_5_results)
         )
         
-        # Generate recommended bets
-        recommended_bets = self._generate_bet_recommendations(
-            home_prob, draw_prob, away_prob, btts_prob, over_25_prob,
-            home_form, away_form
+        # Generate summary
+        summary = self._generate_prediction_summary(
+            fixture_data,
+            home_win_prob,
+            draw_prob,
+            away_win_prob,
+            data_sources
         )
-        
-        # Expected goals calculation
-        expected_goals = {
-            'home': round(home_goals_avg if home_form else 1.3, 2),
-            'away': round(away_goals_avg if away_form else 1.1, 2)
-        }
         
         return EnhancedPrediction(
             fixture_id=fixture_data['fixture_id'],
             home_team=fixture_data['home_team_name'],
             away_team=fixture_data['away_team_name'],
             date=fixture_data['date'],
-            win_probability_home=home_prob,
-            win_probability_away=away_prob,
-            draw_probability=draw_prob,
-            confidence_level=confidence,
-            prediction_factors=prediction_factors,
-            prediction_summary=prediction_summary,
-            recommended_bets=recommended_bets,
-            expected_goals=expected_goals,
+            win_probability_home=round(home_win_prob, 2),
+            win_probability_away=round(away_win_prob, 2),
+            draw_probability=round(draw_prob, 2),
+            predicted_goals_home=round(home_expected_goals, 1),
+            predicted_goals_away=round(away_expected_goals, 1),
             btts_probability=round(btts_prob, 2),
-            over_25_probability=round(over_25_prob, 2)
+            over_25_probability=round(over_25_prob, 2),
+            confidence_score=round(confidence, 2),
+            prediction_summary=summary,
+            data_sources={
+                'form': {'home': home_form.__dict__, 'away': away_form.__dict__},
+                'h2h': h2h.__dict__,
+                'injuries': {'home': home_injuries.__dict__, 'away': away_injuries.__dict__},
+                'motivation': {'home': home_motivation.__dict__, 'away': away_motivation.__dict__}
+            }
         )
     
-    def _generate_prediction_summary(self, fixture_data: Dict, home_prob: float, draw_prob: float,
-                                   away_prob: float, home_form: Optional[TeamForm],
-                                   away_form: Optional[TeamForm], h2h_stats: Optional[HeadToHeadStats],
-                                   injuries: Optional[Dict], standings: Optional[StandingsContext]) -> str:
-        """Generate human-readable prediction summary"""
-        
-        summary_parts = []
-        
-        # Main prediction
-        if home_prob > away_prob and home_prob > draw_prob:
-            summary_parts.append(f"{fixture_data['home_team_name']} is predicted to win with {home_prob}% probability.")
-        elif away_prob > home_prob and away_prob > draw_prob:
-            summary_parts.append(f"{fixture_data['away_team_name']} is predicted to win with {away_prob}% probability.")
-        else:
-            summary_parts.append(f"A draw is the most likely outcome with {draw_prob}% probability.")
-        
-        # Form analysis
-        if home_form and away_form:
-            if home_form.form_rating > away_form.form_rating + 2:
-                summary_parts.append(f"{fixture_data['home_team_name']} is in significantly better form.")
-            elif away_form.form_rating > home_form.form_rating + 2:
-                summary_parts.append(f"{fixture_data['away_team_name']} is in significantly better form.")
-            
-            # Recent results
-            home_recent = ''.join(home_form.last_5_results[:3])
-            away_recent = ''.join(away_form.last_5_results[:3])
-            summary_parts.append(f"Recent form: {fixture_data['home_team_name']} ({home_recent}) vs {fixture_data['away_team_name']} ({away_recent}).")
-        
-        # H2H insight
-        if h2h_stats and h2h_stats.total_matches >= 3:
-            if h2h_stats.home_wins > h2h_stats.away_wins:
-                summary_parts.append(f"{fixture_data['home_team_name']} has dominated recent H2H meetings ({h2h_stats.home_wins} wins in {h2h_stats.total_matches} games).")
-            elif h2h_stats.away_wins > h2h_stats.home_wins:
-                summary_parts.append(f"{fixture_data['away_team_name']} has a strong H2H record ({h2h_stats.away_wins} wins in {h2h_stats.total_matches} games).")
-            
-            if h2h_stats.avg_goals_per_match > 3:
-                summary_parts.append("H2H matches tend to be high-scoring.")
-            elif h2h_stats.avg_goals_per_match < 2:
-                summary_parts.append("H2H matches are typically low-scoring affairs.")
-        
-        # Injury impact
-        if injuries:
-            home_injury = injuries.get('home')
-            away_injury = injuries.get('away')
-            
-            if home_injury and home_injury.key_players_missing:
-                summary_parts.append(f"{fixture_data['home_team_name']} missing key players: {', '.join(home_injury.key_players_missing[:2])}.")
-            if away_injury and away_injury.key_players_missing:
-                summary_parts.append(f"{fixture_data['away_team_name']} missing key players: {', '.join(away_injury.key_players_missing[:2])}.")
-        
-        # Motivation
-        if standings:
-            if standings.home_motivation == "title_race":
-                summary_parts.append(f"{fixture_data['home_team_name']} fighting for the title.")
-            elif standings.home_motivation == "relegation_battle":
-                summary_parts.append(f"{fixture_data['home_team_name']} battling relegation.")
-            
-            if standings.away_motivation == "title_race":
-                summary_parts.append(f"{fixture_data['away_team_name']} fighting for the title.")
-            elif standings.away_motivation == "relegation_battle":
-                summary_parts.append(f"{fixture_data['away_team_name']} battling relegation.")
-        
-        return " ".join(summary_parts[:5])  # Limit to 5 key points
+    def _normalize_to_probability(self, value: float, min_val: float, max_val: float) -> float:
+        """Normalize a value to 0-1 probability range"""
+        return max(0, min(1, (value - min_val) / (max_val - min_val)))
     
-    def _generate_bet_recommendations(self, home_prob: float, draw_prob: float, away_prob: float,
-                                     btts_prob: float, over_25_prob: float,
-                                     home_form: Optional[TeamForm], away_form: Optional[TeamForm]) -> List[Dict]:
-        """Generate betting recommendations based on probabilities"""
+    def _calculate_over_25_probability(self, home_goals: float, away_goals: float) -> float:
+        """Calculate probability of over 2.5 goals using Poisson distribution approximation"""
+        total_expected = home_goals + away_goals
+        if total_expected <= 1.5:
+            return 20.0
+        elif total_expected <= 2.0:
+            return 35.0
+        elif total_expected <= 2.5:
+            return 50.0
+        elif total_expected <= 3.0:
+            return 65.0
+        else:
+            return min(85.0, 65.0 + (total_expected - 3.0) * 10)
+    
+    def _calculate_confidence_score(self, max_prob: float, h2h_matches: int, form_matches: int) -> float:
+        """Calculate confidence in the prediction"""
+        # Base confidence on probability strength
+        prob_confidence = max_prob / 100 * 50  # 0-50 points
         
-        recommendations = []
+        # Data quality confidence
+        data_confidence = 0
+        if h2h_matches >= 5:
+            data_confidence += 25
+        elif h2h_matches >= 3:
+            data_confidence += 15
+        elif h2h_matches >= 1:
+            data_confidence += 10
         
-        # Match result recommendations
-        if home_prob > 55:
-            recommendations.append({
-                'type': 'Match Result',
-                'selection': 'Home Win',
-                'probability': home_prob,
-                'confidence': 'high' if home_prob > 65 else 'medium',
-                'reasoning': 'Strong home advantage and form'
-            })
-        elif away_prob > 55:
-            recommendations.append({
-                'type': 'Match Result',
-                'selection': 'Away Win',
-                'probability': away_prob,
-                'confidence': 'high' if away_prob > 65 else 'medium',
-                'reasoning': 'Away team in superior form'
-            })
+        if form_matches >= 8:
+            data_confidence += 25
+        elif form_matches >= 6:
+            data_confidence += 15
+        elif form_matches >= 4:
+            data_confidence += 10
         
-        # Double chance
-        home_or_draw = home_prob + draw_prob
-        away_or_draw = away_prob + draw_prob
+        return prob_confidence + data_confidence
+    
+    def _generate_prediction_summary(self, fixture_data: Dict, home_prob: float, 
+                                   draw_prob: float, away_prob: float, 
+                                   data_sources: Dict) -> str:
+        """Generate human-readable prediction summary"""
+        # Determine predicted outcome
+        if home_prob > away_prob and home_prob > draw_prob:
+            outcome = f"{fixture_data['home_team_name']} to win"
+            prob = home_prob
+        elif away_prob > home_prob and away_prob > draw_prob:
+            outcome = f"{fixture_data['away_team_name']} to win"
+            prob = away_prob
+        else:
+            outcome = "Draw"
+            prob = draw_prob
         
-        if home_or_draw > 70:
-            recommendations.append({
-                'type': 'Double Chance',
-                'selection': 'Home or Draw',
-                'probability': home_or_draw,
-                'confidence': 'high',
-                'reasoning': 'Low risk option with high probability'
-            })
-        elif away_or_draw > 70:
-            recommendations.append({
-                'type': 'Double Chance',
-                'selection': 'Away or Draw',
-                'probability': away_or_draw,
-                'confidence': 'high',
-                'reasoning': 'Low risk option with high probability'
-            })
+        # Build summary
+        summary_parts = [f"Predicted outcome: {outcome} ({prob:.1f}% probability)."]
         
-        # Goals markets
-        if over_25_prob > 65:
-            recommendations.append({
-                'type': 'Total Goals',
-                'selection': 'Over 2.5 Goals',
-                'probability': over_25_prob,
-                'confidence': 'high' if over_25_prob > 75 else 'medium',
-                'reasoning': 'Both teams scoring frequently'
-            })
-        elif over_25_prob < 35:
-            recommendations.append({
-                'type': 'Total Goals',
-                'selection': 'Under 2.5 Goals',
-                'probability': 100 - over_25_prob,
-                'confidence': 'high' if (100 - over_25_prob) > 75 else 'medium',
-                'reasoning': 'Defensive teams or poor attacking form'
-            })
+        # Add key factors
+        home_form = data_sources.get('home_form', TeamForm())
+        away_form = data_sources.get('away_form', TeamForm())
         
-        # BTTS
-        if btts_prob > 65:
-            recommendations.append({
-                'type': 'Both Teams to Score',
-                'selection': 'Yes',
-                'probability': btts_prob,
-                'confidence': 'high' if btts_prob > 75 else 'medium',
-                'reasoning': 'Both teams have been finding the net regularly'
-            })
-        elif btts_prob < 35:
-            recommendations.append({
-                'type': 'Both Teams to Score',
-                'selection': 'No',
-                'probability': 100 - btts_prob,
-                'confidence': 'high' if (100 - btts_prob) > 75 else 'medium',
-                'reasoning': 'One or both teams struggling to score'
-            })
+        if home_form.form_rating > away_form.form_rating + 2:
+            summary_parts.append(f"{fixture_data['home_team_name']} in excellent form.")
+        elif away_form.form_rating > home_form.form_rating + 2:
+            summary_parts.append(f"{fixture_data['away_team_name']} in excellent form.")
         
-        # Sort by confidence and probability
-        recommendations.sort(key=lambda x: (
-            {'high': 3, 'medium': 2, 'low': 1}[x['confidence']],
-            x['probability']
-        ), reverse=True)
+        h2h = data_sources.get('h2h', HeadToHeadStats())
+        if h2h.total_matches > 0:
+            if h2h.home_wins > h2h.away_wins * 1.5:
+                summary_parts.append(f"H2H favors {fixture_data['home_team_name']}.")
+            elif h2h.away_wins > h2h.home_wins * 1.5:
+                summary_parts.append(f"H2H favors {fixture_data['away_team_name']}.")
         
-        return recommendations[:4]  # Return top 4 recommendations
+        home_injuries = data_sources.get('home_injuries', InjuryReport())
+        away_injuries = data_sources.get('away_injuries', InjuryReport())
+        
+        if home_injuries.impact_rating > 5:
+            summary_parts.append(f"{fixture_data['home_team_name']} affected by injuries.")
+        if away_injuries.impact_rating > 5:
+            summary_parts.append(f"{fixture_data['away_team_name']} affected by injuries.")
+        
+        return " ".join(summary_parts)

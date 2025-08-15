@@ -524,6 +524,87 @@ class SportMonksAPIClient:
         
         return result
     
+    def get_fixtures_between_dates_for_team(self, start_date: str, end_date: str, team_id: int, include: List[str] = None) -> Optional[Dict]:
+        """Get fixtures for a specific team between two dates"""
+        endpoint = f'fixtures/between/{start_date}/{end_date}/{team_id}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(endpoint, params, cache_ttl=600)
+    
+    def get_head_to_head(self, team1_id: int, team2_id: int, include: List[str] = None) -> Optional[Dict]:
+        """Get head-to-head fixtures between two teams"""
+        endpoint = f'fixtures/head-to-head/{team1_id}/{team2_id}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(endpoint, params, cache_ttl=3600)
+    
+    def get_team_injuries(self, team_id: int, include: List[str] = None) -> Optional[Dict]:
+        """Get current injuries for a team"""
+        endpoint = f'injuries/teams/{team_id}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(endpoint, params, cache_ttl=1800)
+    
+    def get_standings_by_season(self, season_id: int, include: List[str] = None) -> Optional[Dict]:
+        """Get league standings for a specific season"""
+        endpoint = f'standings/seasons/{season_id}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(endpoint, params, cache_ttl=1800)
+    
+    def get_team_recent_fixtures(self, team_id: int, limit: int = 10, include: List[str] = None) -> Optional[Dict]:
+        """Get recent fixtures for a team"""
+        # Calculate date range for last 60 days
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=60)
+        
+        endpoint = f'fixtures/between/{start_date.strftime("%Y-%m-%d")}/{end_date.strftime("%Y-%m-%d")}/{team_id}'
+        params = {}
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(endpoint, params, cache_ttl=600)
+    
+    def get_live_scores_filtered(self, league_ids: List[int] = None, include: List[str] = None) -> Optional[Dict]:
+        """Get live scores with optional league filter"""
+        params = {}
+        if league_ids:
+            params['filter[league_ids]'] = ','.join(map(str, league_ids))
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request('livescores', params, cache_ttl=30)
+    
+    def get_team_squad(self, team_id: int, season_id: int = None, include: List[str] = None) -> Optional[Dict]:
+        """Get squad information for a team"""
+        params = {}
+        if season_id:
+            params['filter[season_id]'] = season_id
+        if include:
+            params['include'] = ','.join(include)
+        
+        return self._make_request(f'squads/teams/{team_id}', params, cache_ttl=3600)
+    
+    def get_fixture_statistics(self, fixture_id: int) -> Optional[Dict]:
+        """Get detailed statistics for a fixture"""
+        params = {'include': 'statistics'}
+        
+        return self._make_request(f'fixtures/{fixture_id}', params, cache_ttl=600)
+    
+    def get_team_statistics(self, team_id: int, season_id: int) -> Optional[Dict]:
+        """Get season statistics for a team"""
+        endpoint = f'teams/{team_id}/seasons/{season_id}/statistics'
+        
+        return self._make_request(endpoint, {}, cache_ttl=3600)
+    
     # Generic method for accessing any endpoint
     def get(self, endpoint: str, params: Dict = None, include: List[str] = None, cache_ttl: int = 300) -> Optional[Dict]:
         """

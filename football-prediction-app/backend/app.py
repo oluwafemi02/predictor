@@ -98,7 +98,7 @@ def create_app(config_name=None):
     
     # Register enhanced predictions blueprint
     try:
-        from enhanced_predictions_route import enhanced_predictions_bp
+        from enhanced_predictions_routes import enhanced_predictions_bp
         app.register_blueprint(enhanced_predictions_bp)
         print("Enhanced predictions routes registered successfully")
     except ImportError as e:
