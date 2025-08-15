@@ -341,15 +341,63 @@ export const createPrediction = async (matchId: number) => {
 };
 
 export const getUpcomingPredictions = async () => {
-  const response = await api.get<{ predictions: any[] }>('/upcoming-predictions');
-  return response.data.predictions;
+  // Use SportMonks API endpoint for upcoming fixtures with predictions
+  const days = 7; // Get fixtures for next 7 days
+  const response = await axios.get<{ fixtures: any[] }>(
+    `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/sportmonks/fixtures/upcoming`,
+    {
+      params: { days, predictions: true }
+    }
+  );
+  
+  // Transform SportMonks fixtures with predictions to match the expected format
+  const predictions = response.data.fixtures
+    .filter((fixture: any) => fixture.predictions) // Only include fixtures with predictions
+    .map((fixture: any) => ({
+      id: fixture.id,
+      fixture_id: fixture.id,
+      match: {
+        homeTeam: fixture.home_team?.name || 'Unknown',
+        awayTeam: fixture.away_team?.name || 'Unknown',
+        date: fixture.date,
+        competition: fixture.league?.name || 'Unknown League'
+      },
+      prediction: fixture.predictions?.match_winner,
+      confidence: Math.max(
+        fixture.predictions?.match_winner?.home_win || 0,
+        fixture.predictions?.match_winner?.draw || 0,
+        fixture.predictions?.match_winner?.away_win || 0
+      ) / 100, // Convert percentage to decimal
+      odds: fixture.predictions?.goals
+    }));
+  
+  return predictions;
 };
 
 export const getUpcomingMatches = async (limit?: number) => {
-  const response = await api.get<{ matches: Match[] }>('/upcoming-matches', {
-    params: { limit }
-  });
-  return response.data.matches;
+  // Use SportMonks API endpoint for upcoming fixtures
+  const days = 7; // Get fixtures for next 7 days
+  const response = await axios.get<{ fixtures: any[] }>(
+    `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/sportmonks/fixtures/upcoming`,
+    {
+      params: { days, predictions: false }
+    }
+  );
+  
+  // Transform SportMonks fixtures to match the expected format
+  const matches = response.data.fixtures.slice(0, limit).map((fixture: any) => ({
+    id: fixture.id,
+    homeTeam: fixture.home_team?.name || 'Unknown',
+    awayTeam: fixture.away_team?.name || 'Unknown',
+    date: fixture.date,
+    time: new Date(fixture.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    competition: fixture.league?.name || 'Unknown League',
+    venue: fixture.venue?.name || 'Unknown Venue',
+    homeTeamLogo: fixture.home_team?.logo,
+    awayTeamLogo: fixture.away_team?.logo
+  }));
+  
+  return matches;
 };
 
 // Statistics

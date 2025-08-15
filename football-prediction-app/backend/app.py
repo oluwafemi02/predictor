@@ -1,6 +1,6 @@
 import os
 import atexit
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request, make_response
 from flask_cors import CORS
 from models import db
 from config import config
@@ -31,6 +31,23 @@ def create_app(config_name=None):
          supports_credentials=True,
          expose_headers=['Content-Type', 'Authorization'],
          max_age=3600)  # Cache preflight requests for 1 hour
+    
+    # Log CORS configuration for debugging
+    logger.info(f"CORS configured with origins: {app.config['CORS_ORIGINS']}")
+    
+    # Add explicit OPTIONS handler for preflight requests
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            response = make_response()
+            origin = request.headers.get('Origin')
+            if origin in app.config['CORS_ORIGINS']:
+                response.headers.add("Access-Control-Allow-Origin", origin)
+                response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-API-Key")
+                response.headers.add('Access-Control-Allow-Methods', "GET,POST,PUT,DELETE,OPTIONS")
+                response.headers.add('Access-Control-Allow-Credentials', 'true')
+                response.headers.add('Access-Control-Max-Age', '3600')
+            return response
     
     # Initialize JWT authentication
     try:

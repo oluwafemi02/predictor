@@ -50,6 +50,7 @@ const PredictionsView: React.FC = () => {
 
   const fetchPredictions = async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({
         days: selectedDays.toString(),
@@ -61,14 +62,37 @@ const PredictionsView: React.FC = () => {
       }
 
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/upcoming?${params}`
+        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/upcoming?${params}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        }
       );
       
-      setPredictions(response.data.fixtures);
-      setError(null);
-    } catch (err) {
+      if (response.data && response.data.fixtures) {
+        setPredictions(response.data.fixtures);
+      } else {
+        setPredictions([]);
+        setError('No fixtures data received from server');
+      }
+    } catch (err: any) {
       console.error('Error fetching predictions:', err);
-      setError('Failed to fetch predictions');
+      let errorMessage = 'Failed to fetch predictions';
+      
+      if (err.response) {
+        // Server responded with error
+        errorMessage = err.response.data?.message || err.response.data?.error || `Server error: ${err.response.status}`;
+      } else if (err.request) {
+        // Request made but no response
+        errorMessage = 'Unable to reach the server. Please check your connection.';
+      } else {
+        // Something else happened
+        errorMessage = err.message || 'An unexpected error occurred';
+      }
+      
+      setError(errorMessage);
+      setPredictions([]);
     } finally {
       setLoading(false);
     }
