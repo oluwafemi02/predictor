@@ -7,6 +7,7 @@ import './PredictionsView.css';
 interface Prediction {
   fixture_id: number;
   date: string;
+  status?: string;
   league: {
     id: number;
     name: string;
@@ -22,6 +23,7 @@ interface Prediction {
     name: string;
     logo: string;
   };
+  scores?: any;
   predictions: {
     match_winner: {
       home_win: number;
@@ -41,19 +43,27 @@ interface Prediction {
   };
 }
 
+interface AllFixtures {
+  past: Prediction[];
+  today: Prediction[];
+  upcoming: Prediction[];
+}
+
 const PredictionsView: React.FC = () => {
-  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [allFixtures, setAllFixtures] = useState<AllFixtures>({ past: [], today: [], upcoming: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState(7);
   const [selectedLeague, setSelectedLeague] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'past' | 'today' | 'upcoming'>('upcoming');
 
   const fetchPredictions = async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        days: selectedDays.toString(),
+        days_back: selectedDays.toString(),
+        days_ahead: selectedDays.toString(),
         predictions: 'true',
       });
       
@@ -62,7 +72,7 @@ const PredictionsView: React.FC = () => {
       }
 
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/upcoming?${params}`,
+        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/all?${params}`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -71,9 +81,9 @@ const PredictionsView: React.FC = () => {
       );
       
       if (response.data && response.data.fixtures) {
-        setPredictions(response.data.fixtures);
+        setAllFixtures(response.data.fixtures);
       } else {
-        setPredictions([]);
+        setAllFixtures({ past: [], today: [], upcoming: [] });
         setError('No fixtures data received from server');
       }
     } catch (err: any) {
@@ -92,7 +102,7 @@ const PredictionsView: React.FC = () => {
       }
       
       setError(errorMessage);
-      setPredictions([]);
+      setAllFixtures({ past: [], today: [], upcoming: [] });
     } finally {
       setLoading(false);
     }
@@ -165,10 +175,10 @@ const PredictionsView: React.FC = () => {
                     onChange={(e) => setSelectedDays(Number(e.target.value))}
                     size="sm"
                   >
-                    <option value={1}>Next 24 hours</option>
-                    <option value={3}>Next 3 days</option>
-                    <option value={7}>Next 7 days</option>
-                    <option value={14}>Next 14 days</option>
+                    <option value={1}>1 day</option>
+                    <option value={3}>3 days</option>
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
                   </Form.Select>
                 </Form.Group>
               </Col>
@@ -181,7 +191,7 @@ const PredictionsView: React.FC = () => {
                     size="sm"
                   >
                     <option value="">All Leagues</option>
-                    <option value="2">Premier League</option>
+                    <option value="8">Premier League</option>
                     <option value="564">La Liga</option>
                     <option value="82">Bundesliga</option>
                     <option value="384">Serie A</option>
@@ -194,7 +204,36 @@ const PredictionsView: React.FC = () => {
         </Row>
       </div>
 
-      {predictions.length === 0 ? (
+      <div className="fixtures-tabs mb-4">
+        <ul className="nav nav-tabs">
+          <li className="nav-item">
+            <button 
+              className={`nav-link ${activeTab === 'past' ? 'active' : ''}`}
+              onClick={() => setActiveTab('past')}
+            >
+              Past Fixtures ({allFixtures.past.length})
+            </button>
+          </li>
+          <li className="nav-item">
+            <button 
+              className={`nav-link ${activeTab === 'today' ? 'active' : ''}`}
+              onClick={() => setActiveTab('today')}
+            >
+              Today's Fixtures ({allFixtures.today.length})
+            </button>
+          </li>
+          <li className="nav-item">
+            <button 
+              className={`nav-link ${activeTab === 'upcoming' ? 'active' : ''}`}
+              onClick={() => setActiveTab('upcoming')}
+            >
+              Upcoming Fixtures ({allFixtures.upcoming.length})
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      {allFixtures[activeTab].length === 0 ? (
         <Card className="text-center py-5">
           <Card.Body>
             <Target size={48} className="text-muted mb-3" />
@@ -204,11 +243,14 @@ const PredictionsView: React.FC = () => {
         </Card>
       ) : (
         <Row>
-          {predictions.map((prediction) => {
-            const winner = getWinnerPrediction(prediction.predictions.match_winner);
+          {allFixtures[activeTab].map((prediction) => {
+            const winner = prediction.predictions?.match_winner ? 
+              getWinnerPrediction(prediction.predictions.match_winner) : null;
+            const isPastFixture = activeTab === 'past';
+            const hasScores = prediction.scores && prediction.scores.localteam_score !== undefined;
             
             return (
-              <Col key={prediction.fixture_id} xl={6} className="mb-4">
+              <Col key={prediction.id || prediction.fixture_id} xl={6} className="mb-4">
                 <Card className="prediction-card h-100 shadow-sm">
                   <Card.Header className="prediction-header">
                     <div className="d-flex justify-content-between align-items-center">
@@ -225,6 +267,11 @@ const PredictionsView: React.FC = () => {
                       <div className="text-muted small">
                         <Calendar size={14} className="me-1" />
                         {formatDate(prediction.date)}
+                        {prediction.status && prediction.status !== 'NS' && (
+                          <Badge bg={isPastFixture ? 'secondary' : 'info'} className="ms-2">
+                            {prediction.status}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </Card.Header>
@@ -238,8 +285,19 @@ const PredictionsView: React.FC = () => {
                           className="team-logo-small mb-2"
                         />
                         <div className="team-name-small">{prediction.home_team.name}</div>
+                        {hasScores && (
+                          <div className="team-score h3 mt-2">{prediction.scores.localteam_score}</div>
+                        )}
                       </div>
-                      <div className="vs-separator">VS</div>
+                      
+                      <div className="vs-divider">
+                        {hasScores ? (
+                          <span className="score-separator">-</span>
+                        ) : (
+                          <span>VS</span>
+                        )}
+                      </div>
+                      
                       <div className="team-info text-center">
                         <img 
                           src={prediction.away_team.logo || '/placeholder-team.png'} 
@@ -247,6 +305,9 @@ const PredictionsView: React.FC = () => {
                           className="team-logo-small mb-2"
                         />
                         <div className="team-name-small">{prediction.away_team.name}</div>
+                        {hasScores && (
+                          <div className="team-score h3 mt-2">{prediction.scores.visitorteam_score}</div>
+                        )}
                       </div>
                     </div>
 
@@ -255,36 +316,44 @@ const PredictionsView: React.FC = () => {
                         <Target size={16} className="me-1" />
                         Match Result Prediction
                       </h6>
-                      <div className="winner-prediction text-center mb-3">
-                        <Badge bg={winner.variant} className="prediction-badge">
-                          {winner.type} - {winner.prob.toFixed(1)}%
-                        </Badge>
-                      </div>
+                      {winner ? (
+                        <div className="winner-prediction text-center mb-3">
+                          <Badge bg={winner.variant} className="prediction-badge">
+                            {winner.type} - {winner.prob.toFixed(1)}%
+                          </Badge>
+                        </div>
+                      ) : (
+                        <div className="text-center text-muted">No prediction available.</div>
+                      )}
                       <div className="probabilities">
-                        <div className="prob-item">
-                          <span>Home Win</span>
-                          <ProgressBar 
-                            now={prediction.predictions.match_winner.home_win} 
-                            label={`${prediction.predictions.match_winner.home_win.toFixed(1)}%`}
-                            variant={getProbabilityColor(prediction.predictions.match_winner.home_win)}
-                          />
-                        </div>
-                        <div className="prob-item">
-                          <span>Draw</span>
-                          <ProgressBar 
-                            now={prediction.predictions.match_winner.draw} 
-                            label={`${prediction.predictions.match_winner.draw.toFixed(1)}%`}
-                            variant={getProbabilityColor(prediction.predictions.match_winner.draw)}
-                          />
-                        </div>
-                        <div className="prob-item">
-                          <span>Away Win</span>
-                          <ProgressBar 
-                            now={prediction.predictions.match_winner.away_win} 
-                            label={`${prediction.predictions.match_winner.away_win.toFixed(1)}%`}
-                            variant={getProbabilityColor(prediction.predictions.match_winner.away_win)}
-                          />
-                        </div>
+                        {winner && (
+                          <>
+                            <div className="prob-item">
+                              <span>Home Win</span>
+                              <ProgressBar 
+                                now={prediction.predictions.match_winner.home_win} 
+                                label={`${prediction.predictions.match_winner.home_win.toFixed(1)}%`}
+                                variant={getProbabilityColor(prediction.predictions.match_winner.home_win)}
+                              />
+                            </div>
+                            <div className="prob-item">
+                              <span>Draw</span>
+                              <ProgressBar 
+                                now={prediction.predictions.match_winner.draw} 
+                                label={`${prediction.predictions.match_winner.draw.toFixed(1)}%`}
+                                variant={getProbabilityColor(prediction.predictions.match_winner.draw)}
+                              />
+                            </div>
+                            <div className="prob-item">
+                              <span>Away Win</span>
+                              <ProgressBar 
+                                now={prediction.predictions.match_winner.away_win} 
+                                label={`${prediction.predictions.match_winner.away_win.toFixed(1)}%`}
+                                variant={getProbabilityColor(prediction.predictions.match_winner.away_win)}
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -293,40 +362,44 @@ const PredictionsView: React.FC = () => {
                         <TrendingUp size={16} className="me-1" />
                         Goals Predictions
                       </h6>
-                      <Row>
-                        <Col xs={6}>
-                          <div className="goal-prediction">
-                            <div className="goal-label">Over 2.5</div>
-                            <div className="goal-value">
-                              {prediction.predictions.goals.over_25.toFixed(1)}%
+                      {prediction.predictions?.goals ? (
+                        <Row>
+                          <Col xs={6}>
+                            <div className="goal-prediction">
+                              <div className="goal-label">Over 2.5</div>
+                              <div className="goal-value">
+                                {prediction.predictions.goals.over_25.toFixed(1)}%
+                              </div>
                             </div>
-                          </div>
-                        </Col>
-                        <Col xs={6}>
-                          <div className="goal-prediction">
-                            <div className="goal-label">Under 2.5</div>
-                            <div className="goal-value">
-                              {prediction.predictions.goals.under_25.toFixed(1)}%
+                          </Col>
+                          <Col xs={6}>
+                            <div className="goal-prediction">
+                              <div className="goal-label">Under 2.5</div>
+                              <div className="goal-value">
+                                {prediction.predictions.goals.under_25.toFixed(1)}%
+                              </div>
                             </div>
-                          </div>
-                        </Col>
-                        <Col xs={6}>
-                          <div className="goal-prediction">
-                            <div className="goal-label">BTTS Yes</div>
-                            <div className="goal-value">
-                              {prediction.predictions.goals.btts_yes.toFixed(1)}%
+                          </Col>
+                          <Col xs={6}>
+                            <div className="goal-prediction">
+                              <div className="goal-label">BTTS Yes</div>
+                              <div className="goal-value">
+                                {prediction.predictions.goals.btts_yes.toFixed(1)}%
+                              </div>
                             </div>
-                          </div>
-                        </Col>
-                        <Col xs={6}>
-                          <div className="goal-prediction">
-                            <div className="goal-label">BTTS No</div>
-                            <div className="goal-value">
-                              {prediction.predictions.goals.btts_no.toFixed(1)}%
+                          </Col>
+                          <Col xs={6}>
+                            <div className="goal-prediction">
+                              <div className="goal-label">BTTS No</div>
+                              <div className="goal-value">
+                                {prediction.predictions.goals.btts_no.toFixed(1)}%
+                              </div>
                             </div>
-                          </div>
-                        </Col>
-                      </Row>
+                          </Col>
+                        </Row>
+                      ) : (
+                        <div className="text-center text-muted">No prediction available.</div>
+                      )}
                     </div>
                   </Card.Body>
 

@@ -213,8 +213,10 @@ def get_upcoming_fixtures():
         league_id = request.args.get('league_id')
         include_predictions = request.args.get('predictions', 'true').lower() == 'true'
         
-        start_date = datetime.utcnow().strftime('%Y-%m-%d')
-        end_date = (datetime.utcnow() + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+        # Start from beginning of today instead of current time to include today's matches
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = today.strftime('%Y-%m-%d')
+        end_date = (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
         
         logger.info(f"Fetching upcoming fixtures from {start_date} to {end_date}")
         
@@ -413,6 +415,236 @@ def get_upcoming_fixtures():
             'message': str(e),
             'fixtures': [],
             'count': 0
+        }), 200  # Return 200 with empty data to avoid CORS preflight issues
+
+@sportmonks_bp.route('/fixtures/past', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=600)
+def get_past_fixtures():
+    """Get past fixtures from the last N days"""
+    try:
+        days_back = int(request.args.get('days', 7))
+        league_id = request.args.get('league_id')
+        include_predictions = request.args.get('predictions', 'false').lower() == 'true'
+        
+        # Get fixtures from the past N days up to yesterday
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+        start_date = (today - timedelta(days=days_back)).strftime('%Y-%m-%d')
+        
+        logger.info(f"Fetching past fixtures from {start_date} to {end_date}")
+        
+        # Check if API key is configured
+        import os
+        if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+            logger.warning("No SportMonks API key configured, returning empty data")
+            return jsonify({
+                'fixtures': [],
+                'count': 0,
+                'date_range': {
+                    'start': start_date,
+                    'end': end_date
+                },
+                'is_mock_data': True
+            }), 200
+        
+        # Get fixtures from API
+        league_ids = [int(league_id)] if league_id else None
+        include_params = ['localTeam', 'visitorTeam', 'league', 'venue', 'scores']
+        
+        fixtures = sportmonks_client.get_fixtures_by_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            league_ids=league_ids,
+            include=include_params
+        )
+        
+        logger.info(f"Retrieved {len(fixtures)} past fixtures from API")
+        
+        # Process fixtures
+        processed_fixtures = []
+        for fixture_data in fixtures:
+            fixture = {
+                'id': fixture_data['id'],
+                'date': fixture_data['starting_at'],
+                'status': fixture_data.get('state', {}).get('state', 'FT'),
+                'league': {
+                    'id': fixture_data.get('league', {}).get('data', {}).get('id') if 'league' in fixture_data else None,
+                    'name': fixture_data.get('league', {}).get('data', {}).get('name') if 'league' in fixture_data else None,
+                    'logo': fixture_data.get('league', {}).get('data', {}).get('logo_path') if 'league' in fixture_data else None
+                },
+                'home_team': {
+                    'id': fixture_data.get('localTeam', {}).get('data', {}).get('id') if 'localTeam' in fixture_data else None,
+                    'name': fixture_data.get('localTeam', {}).get('data', {}).get('name') if 'localTeam' in fixture_data else None,
+                    'logo': fixture_data.get('localTeam', {}).get('data', {}).get('logo_path') if 'localTeam' in fixture_data else None
+                },
+                'away_team': {
+                    'id': fixture_data.get('visitorTeam', {}).get('data', {}).get('id') if 'visitorTeam' in fixture_data else None,
+                    'name': fixture_data.get('visitorTeam', {}).get('data', {}).get('name') if 'visitorTeam' in fixture_data else None,
+                    'logo': fixture_data.get('visitorTeam', {}).get('data', {}).get('logo_path') if 'visitorTeam' in fixture_data else None
+                },
+                'scores': fixture_data.get('scores', {}),
+                'venue': fixture_data.get('venue', {}).get('data', {}) if 'venue' in fixture_data else {}
+            }
+            
+            processed_fixtures.append(fixture)
+        
+        logger.info(f"Processed {len(processed_fixtures)} past fixtures")
+        
+        return jsonify({
+            'fixtures': processed_fixtures,
+            'count': len(processed_fixtures),
+            'date_range': {
+                'start': start_date,
+                'end': end_date
+            }
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in get_past_fixtures: {str(e)}")
+        return jsonify({
+            'error': 'Failed to fetch past fixtures',
+            'message': str(e),
+            'fixtures': [],
+            'count': 0
+        }), 200  # Return 200 with empty data to avoid CORS preflight issues
+
+@sportmonks_bp.route('/fixtures/all', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=600)
+def get_all_fixtures():
+    """Get all fixtures - past, today, and upcoming"""
+    try:
+        days_back = int(request.args.get('days_back', 7))
+        days_ahead = int(request.args.get('days_ahead', 7))
+        league_id = request.args.get('league_id')
+        include_predictions = request.args.get('predictions', 'false').lower() == 'true'
+        
+        # Calculate date range
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = (today - timedelta(days=days_back)).strftime('%Y-%m-%d')
+        end_date = (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+        
+        logger.info(f"Fetching all fixtures from {start_date} to {end_date}")
+        
+        # Check if API key is configured
+        import os
+        if not os.environ.get('SPORTMONKS_API_KEY') and not os.environ.get('SPORTMONKS_PRIMARY_TOKEN'):
+            logger.warning("No SportMonks API key configured, returning empty data")
+            return jsonify({
+                'fixtures': {
+                    'past': [],
+                    'today': [],
+                    'upcoming': []
+                },
+                'count': {
+                    'past': 0,
+                    'today': 0,
+                    'upcoming': 0,
+                    'total': 0
+                },
+                'date_range': {
+                    'start': start_date,
+                    'end': end_date
+                },
+                'is_mock_data': True
+            }), 200
+        
+        # Get fixtures from API
+        league_ids = [int(league_id)] if league_id else None
+        include_params = ['localTeam', 'visitorTeam', 'league', 'venue', 'scores']
+        
+        fixtures = sportmonks_client.get_fixtures_by_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            league_ids=league_ids,
+            include=include_params
+        )
+        
+        logger.info(f"Retrieved {len(fixtures)} total fixtures from API")
+        
+        # Categorize fixtures
+        past_fixtures = []
+        today_fixtures = []
+        upcoming_fixtures = []
+        today_str = today.strftime('%Y-%m-%d')
+        
+        for fixture_data in fixtures:
+            fixture_date = datetime.fromisoformat(fixture_data['starting_at'].replace('Z', '+00:00'))
+            fixture_date_str = fixture_date.strftime('%Y-%m-%d')
+            
+            fixture = {
+                'id': fixture_data['id'],
+                'date': fixture_data['starting_at'],
+                'status': fixture_data.get('state', {}).get('state', 'NS'),
+                'league': {
+                    'id': fixture_data.get('league', {}).get('data', {}).get('id') if 'league' in fixture_data else None,
+                    'name': fixture_data.get('league', {}).get('data', {}).get('name') if 'league' in fixture_data else None,
+                    'logo': fixture_data.get('league', {}).get('data', {}).get('logo_path') if 'league' in fixture_data else None
+                },
+                'home_team': {
+                    'id': fixture_data.get('localTeam', {}).get('data', {}).get('id') if 'localTeam' in fixture_data else None,
+                    'name': fixture_data.get('localTeam', {}).get('data', {}).get('name') if 'localTeam' in fixture_data else None,
+                    'logo': fixture_data.get('localTeam', {}).get('data', {}).get('logo_path') if 'localTeam' in fixture_data else None
+                },
+                'away_team': {
+                    'id': fixture_data.get('visitorTeam', {}).get('data', {}).get('id') if 'visitorTeam' in fixture_data else None,
+                    'name': fixture_data.get('visitorTeam', {}).get('data', {}).get('name') if 'visitorTeam' in fixture_data else None,
+                    'logo': fixture_data.get('visitorTeam', {}).get('data', {}).get('logo_path') if 'visitorTeam' in fixture_data else None
+                },
+                'scores': fixture_data.get('scores', {}),
+                'venue': fixture_data.get('venue', {}).get('data', {}) if 'venue' in fixture_data else {}
+            }
+            
+            # Add predictions for upcoming/today fixtures if requested
+            if include_predictions and fixture_date >= today:
+                fixture['predictions'] = None  # Would fetch from predictions API
+            
+            # Categorize by date
+            if fixture_date_str < today_str:
+                past_fixtures.append(fixture)
+            elif fixture_date_str == today_str:
+                today_fixtures.append(fixture)
+            else:
+                upcoming_fixtures.append(fixture)
+        
+        logger.info(f"Categorized fixtures - Past: {len(past_fixtures)}, Today: {len(today_fixtures)}, Upcoming: {len(upcoming_fixtures)}")
+        
+        return jsonify({
+            'fixtures': {
+                'past': past_fixtures,
+                'today': today_fixtures,
+                'upcoming': upcoming_fixtures
+            },
+            'count': {
+                'past': len(past_fixtures),
+                'today': len(today_fixtures),
+                'upcoming': len(upcoming_fixtures),
+                'total': len(fixtures)
+            },
+            'date_range': {
+                'start': start_date,
+                'end': end_date,
+                'today': today_str
+            }
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in get_all_fixtures: {str(e)}")
+        return jsonify({
+            'error': 'Failed to fetch fixtures',
+            'message': str(e),
+            'fixtures': {
+                'past': [],
+                'today': [],
+                'upcoming': []
+            },
+            'count': {
+                'past': 0,
+                'today': 0,
+                'upcoming': 0,
+                'total': 0
+            }
         }), 200  # Return 200 with empty data to avoid CORS preflight issues
 
 @sportmonks_bp.route('/predictions/<int:fixture_id>', methods=['GET'])
