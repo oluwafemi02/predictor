@@ -296,7 +296,7 @@ const EnhancedPredictionsView: React.FC = () => {
       {/* Content */}
       {loading ? (
         <div className="text-center py-5">
-          <Spinner animation="border" variant="primary" size="lg" />
+          <Spinner animation="border" variant="primary" />
           <p className="mt-3">Loading enhanced predictions...</p>
         </div>
       ) : error ? (
