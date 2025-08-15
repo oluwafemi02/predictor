@@ -1157,46 +1157,27 @@ def get_predictions():
             }
         })
 
+from match_service import MatchService
+from error_handlers import handle_api_errors, log_performance
+from exceptions import DataNotFoundError
+
 @api_bp.route('/matches/<int:match_id>', methods=['GET'])
+@handle_api_errors
+@log_performance
 def get_match_details(match_id):
     """Get detailed information about a specific match"""
-    try:
-        # Get the actual match from database
-        match = Match.query.get(match_id)
-        
-        if not match:
-            return jsonify({
-                'status': 'error',
-                'message': 'Match not found'
-            }), 404
-        
-        # Calculate head to head stats
-        h2h_matches = Match.query.filter(
-            ((Match.home_team_id == match.home_team_id) & (Match.away_team_id == match.away_team_id)) |
-            ((Match.home_team_id == match.away_team_id) & (Match.away_team_id == match.home_team_id)),
-            Match.status == 'finished',
-            Match.id != match.id
-        ).order_by(Match.match_date.desc()).limit(10).all()
-        
-        home_wins = 0
-        away_wins = 0
-        draws = 0
-        
-        for h2h in h2h_matches:
-            if h2h.home_team_id == match.home_team_id:
-                if h2h.home_score > h2h.away_score:
-                    home_wins += 1
-                elif h2h.away_score > h2h.home_score:
-                    away_wins += 1
-                else:
-                    draws += 1
-            else:
-                if h2h.home_score > h2h.away_score:
-                    away_wins += 1
-                elif h2h.away_score > h2h.home_score:
-                    home_wins += 1
-                else:
-                    draws += 1
+    # Get match with all details
+    match = MatchService.get_match_with_details(match_id)
+    
+    if not match:
+        raise DataNotFoundError(f"Match with ID {match_id} not found", resource="match")
+    
+    # Calculate head to head stats
+    h2h_stats = MatchService.calculate_head_to_head(
+        match.home_team_id,
+        match.away_team_id,
+        match.id
+    )
         
         # Get recent form for both teams
         home_form = Match.query.filter(

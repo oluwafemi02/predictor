@@ -6,8 +6,9 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
-// Layout
+// Layout and Error Handling
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -264,30 +265,34 @@ const theme = createTheme({
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <CssBaseline />
-          <Router>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/predictions" element={<Predictions />} />
-                <Route path="/matches" element={<Matches />} />
-                <Route path="/matches/:matchId" element={<MatchDetails />} />
-                <Route path="/teams" element={<Teams />} />
-                <Route path="/teams/:teamId" element={<TeamDetails />} />
-                <Route path="/players" element={<Players />} />
-                <Route path="/league-table" element={<LeagueTable />} />
-                <Route path="/model-status" element={<ModelStatus />} />
-                <Route path="/sportmonks" element={<SportMonks />} />
-              </Routes>
-            </Layout>
-          </Router>
-        </LocalizationProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={theme}>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <CssBaseline />
+            <Router>
+              <Layout>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/predictions" element={<Predictions />} />
+                    <Route path="/matches" element={<Matches />} />
+                    <Route path="/matches/:matchId" element={<MatchDetails />} />
+                    <Route path="/teams" element={<Teams />} />
+                    <Route path="/teams/:teamId" element={<TeamDetails />} />
+                    <Route path="/players" element={<Players />} />
+                    <Route path="/league-table" element={<LeagueTable />} />
+                    <Route path="/model-status" element={<ModelStatus />} />
+                    <Route path="/sportmonks" element={<SportMonks />} />
+                  </Routes>
+                </ErrorBoundary>
+              </Layout>
+            </Router>
+          </LocalizationProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
