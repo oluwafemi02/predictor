@@ -152,7 +152,7 @@ const EnhancedValueBets: React.FC = () => {
         <Alert variant="success" className="mb-4">
           <Target className="me-2" />
           <strong>{valueBets.length} High Confidence Predictions Found!</strong> 
-          <span className="ms-2">Fixtures with >60% win probability</span>
+          <span className="ms-2">Fixtures with &gt;60% win probability</span>
         </Alert>
       )}
 
