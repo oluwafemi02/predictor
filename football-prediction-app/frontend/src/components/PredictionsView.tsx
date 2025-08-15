@@ -3,6 +3,7 @@ import { Card, Badge, Spinner, Row, Col, ProgressBar, Button, Form } from 'react
 import { Brain, Calendar, TrendingUp, Target, DollarSign, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import './PredictionsView.css';
+import OddsDisplay from './OddsDisplay';
 
 interface Prediction {
   id: number;
@@ -401,6 +402,34 @@ const PredictionsView: React.FC = () => {
                       ) : (
                         <div className="text-center text-muted">No prediction available.</div>
                       )}
+                    </div>
+
+                    {prediction.predictions?.correct_scores && prediction.predictions.correct_scores.length > 0 && (
+                      <div className="prediction-section">
+                        <h6 className="section-title">
+                          <Target size={16} className="me-1" />
+                          Top Score Predictions
+                        </h6>
+                        <div className="correct-scores">
+                          {prediction.predictions.correct_scores.slice(0, 3).map((score: any, idx: number) => (
+                            <Badge 
+                              key={idx} 
+                              bg={idx === 0 ? 'success' : 'secondary'} 
+                              className="score-badge me-2"
+                            >
+                              {score.score}: {score.probability.toFixed(1)}%
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="prediction-section">
+                      <h6 className="section-title">
+                        <DollarSign size={16} className="me-1" />
+                        Live Odds
+                      </h6>
+                      <OddsDisplay fixtureId={prediction.id} showProbabilities={false} />
                     </div>
                   </Card.Body>
 
