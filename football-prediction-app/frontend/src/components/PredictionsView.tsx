@@ -113,7 +113,7 @@ const PredictionsView: React.FC = () => {
     fetchPredictions();
   }, [selectedDays, selectedLeague]);
 
-  const getWinnerPrediction = (pred: Prediction['predictions']['match_winner']) => {
+  const getWinnerPrediction = (pred: { home_win: number; draw: number; away_win: number }) => {
     const max = Math.max(pred.home_win, pred.draw, pred.away_win);
     if (max === pred.home_win) return { type: 'Home Win', prob: pred.home_win, variant: 'primary' };
     if (max === pred.draw) return { type: 'Draw', prob: pred.draw, variant: 'warning' };
