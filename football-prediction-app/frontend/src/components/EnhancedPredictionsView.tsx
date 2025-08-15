@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Badge, ProgressBar, Spinner, Alert, Button, Form, Tab, Tabs } from 'react-bootstrap';
-import { api } from '../services/api';
+import api from '../services/api';
 import './EnhancedPredictionsView.css';
 
 interface EnhancedPrediction {

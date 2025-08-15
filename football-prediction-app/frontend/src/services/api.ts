@@ -581,6 +581,6 @@ export const authAPI = {
 };
 
 // Export everything
-export { tokenManager };
+export { tokenManager, api };
 
 export default api;
