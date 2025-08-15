@@ -439,6 +439,59 @@ class SportMonksAPIClient:
         
         return None
     
+    def get_round_with_odds(self, round_id: int, market_ids: List[int] = None, bookmaker_ids: List[int] = None) -> Dict:
+        """Get round fixtures with odds"""
+        params = {
+            'include': 'fixtures.odds.market;fixtures.odds.bookmaker;fixtures.participants;league.country'
+        }
+        
+        filters = []
+        if market_ids:
+            filters.append(f'markets:{",".join(map(str, market_ids))}')
+        if bookmaker_ids:
+            filters.append(f'bookmakers:{",".join(map(str, bookmaker_ids))}')
+        
+        if filters:
+            params['filters'] = ';'.join(filters)
+        
+        endpoint = f'rounds/{round_id}'
+        return self._make_request(endpoint, params, cache_ttl=3600)
+    
+    def get_current_round(self, league_id: int, season_id: int = None) -> Optional[int]:
+        """Get the current round ID for a league/season"""
+        if not season_id:
+            season_id = self.get_current_season_id(league_id)
+        
+        params = {
+            'filter[season_id]': season_id,
+            'filter[is_current]': 'true'
+        }
+        
+        result = self._make_request('rounds', params, cache_ttl=3600)
+        
+        if result and 'data' in result and len(result['data']) > 0:
+            return result['data'][0]['id']
+        
+        return None
+    
+    def get_fixture_with_odds(self, fixture_id: int, market_ids: List[int] = None, bookmaker_ids: List[int] = None) -> Dict:
+        """Get a single fixture with odds"""
+        params = {
+            'include': 'odds.market;odds.bookmaker;participants;league;venue'
+        }
+        
+        filters = []
+        if market_ids:
+            filters.append(f'oddsMarkets:{",".join(map(str, market_ids))}')
+        if bookmaker_ids:
+            filters.append(f'oddsBookmakers:{",".join(map(str, bookmaker_ids))}')
+        
+        if filters:
+            params['filters'] = ';'.join(filters)
+        
+        endpoint = f'fixtures/{fixture_id}'
+        return self._make_request(endpoint, params, cache_ttl=300)
+    
     # Health check and status methods
     
     def health_check(self) -> Dict[str, Any]:

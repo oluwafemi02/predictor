@@ -1083,30 +1083,160 @@ def get_leagues():
 @cache_response(timeout=300)
 def get_fixture_odds(fixture_id):
     """Get odds for a fixture from various bookmakers"""
+    market_id = int(request.args.get('market_id', 1))  # Default to Fulltime Result
     bookmaker_id = request.args.get('bookmaker_id')
     
-    response = sportmonks_client.get_odds_by_fixture(fixture_id, bookmaker_id=bookmaker_id)
+    # Prepare filters
+    market_ids = [market_id]
+    bookmaker_ids = [int(bookmaker_id)] if bookmaker_id else None
+    
+    response = sportmonks_client.get_fixture_with_odds(fixture_id, market_ids=market_ids, bookmaker_ids=bookmaker_ids)
     
     if not response or 'data' not in response:
-        return jsonify({'odds': []}), 200
+        return jsonify({'odds': {}, 'fixture': None}), 200
     
-    odds_by_market = {}
+    fixture_data = response['data']
     
-    for odds_data in response['data']:
-        market = odds_data['name']
-        if market not in odds_by_market:
-            odds_by_market[market] = []
+    # Transform fixture data
+    participants = fixture_data.get('participants', [])
+    home_team = next((p for p in participants if p.get('meta', {}).get('location') == 'home'), {})
+    away_team = next((p for p in participants if p.get('meta', {}).get('location') == 'away'), {})
+    
+    fixture = {
+        'id': fixture_data.get('id'),
+        'name': fixture_data.get('name'),
+        'date': fixture_data.get('starting_at'),
+        'home_team': {
+            'id': home_team.get('id'),
+            'name': home_team.get('name'),
+            'logo': home_team.get('image_path')
+        },
+        'away_team': {
+            'id': away_team.get('id'),
+            'name': away_team.get('name'),
+            'logo': away_team.get('image_path')
+        }
+    }
+    
+    # Process odds
+    odds_by_bookmaker = {}
+    
+    for odds_data in fixture_data.get('odds', []):
+        bookmaker = odds_data.get('bookmaker', {})
+        bookmaker_name = bookmaker.get('name', 'Unknown')
+        bookmaker_id = bookmaker.get('id')
         
-        odds_by_market[market].append({
-            'bookmaker': odds_data['bookmaker']['data']['name'],
-            'bookmaker_id': odds_data['bookmaker']['data']['id'],
-            'odds': odds_data['odds']['data'],
-            'last_updated': odds_data['updated_at']
+        if bookmaker_name not in odds_by_bookmaker:
+            odds_by_bookmaker[bookmaker_name] = {
+                'bookmaker_id': bookmaker_id,
+                'bookmaker_name': bookmaker_name,
+                'odds': []
+            }
+        
+        odds_by_bookmaker[bookmaker_name]['odds'].append({
+            'id': odds_data.get('id'),
+            'label': odds_data.get('label'),
+            'value': odds_data.get('value'),
+            'probability': odds_data.get('probability'),
+            'american': odds_data.get('american'),
+            'fractional': odds_data.get('fractional'),
+            'decimal': odds_data.get('dp3'),
+            'winning': odds_data.get('winning', False),
+            'market': odds_data.get('market', {}).get('name', 'Fulltime Result'),
+            'updated_at': odds_data.get('latest_bookmaker_update', odds_data.get('updated_at'))
         })
     
     return jsonify({
         'fixture_id': fixture_id,
-        'odds': odds_by_market,
+        'fixture': fixture,
+        'odds': odds_by_bookmaker,
+        'market_id': market_id,
+        'updated_at': datetime.utcnow().isoformat()
+    }), 200
+
+@sportmonks_bp.route('/fixtures/round/<int:round_id>/odds', methods=['GET'])
+@cross_origin()
+@handle_errors
+@cache_response(timeout=600)
+def get_round_fixtures_with_odds(round_id):
+    """Get all fixtures in a round with odds"""
+    market_id = int(request.args.get('market_id', 1))  # Default to Fulltime Result
+    bookmaker_id = request.args.get('bookmaker_id', 2)  # Default to bet365
+    
+    # Prepare filters
+    market_ids = [market_id]
+    bookmaker_ids = [int(bookmaker_id)] if bookmaker_id else None
+    
+    response = sportmonks_client.get_round_with_odds(round_id, market_ids=market_ids, bookmaker_ids=bookmaker_ids)
+    
+    if not response or 'data' not in response:
+        return jsonify({'fixtures': [], 'round': None}), 200
+    
+    round_data = response['data']
+    
+    # Transform round data
+    round_info = {
+        'id': round_data.get('id'),
+        'name': round_data.get('name'),
+        'league': round_data.get('league', {}),
+        'season_id': round_data.get('season_id'),
+        'starting_at': round_data.get('starting_at'),
+        'ending_at': round_data.get('ending_at'),
+        'is_current': round_data.get('is_current', False)
+    }
+    
+    # Process fixtures with odds
+    fixtures_with_odds = []
+    
+    for fixture_data in round_data.get('fixtures', []):
+        participants = fixture_data.get('participants', [])
+        home_team = next((p for p in participants if p.get('meta', {}).get('location') == 'home'), {})
+        away_team = next((p for p in participants if p.get('meta', {}).get('location') == 'away'), {})
+        
+        # Process odds for this fixture
+        odds_list = []
+        for odds_data in fixture_data.get('odds', []):
+            odds_list.append({
+                'id': odds_data.get('id'),
+                'label': odds_data.get('label'),
+                'value': odds_data.get('value'),
+                'probability': odds_data.get('probability'),
+                'american': odds_data.get('american'),
+                'fractional': odds_data.get('fractional'),
+                'decimal': odds_data.get('dp3'),
+                'winning': odds_data.get('winning', False),
+                'bookmaker': odds_data.get('bookmaker', {}).get('name', 'bet365'),
+                'updated_at': odds_data.get('latest_bookmaker_update', odds_data.get('updated_at'))
+            })
+        
+        fixtures_with_odds.append({
+            'id': fixture_data.get('id'),
+            'name': fixture_data.get('name'),
+            'date': fixture_data.get('starting_at'),
+            'state_id': fixture_data.get('state_id'),
+            'result_info': fixture_data.get('result_info'),
+            'home_team': {
+                'id': home_team.get('id'),
+                'name': home_team.get('name'),
+                'logo': home_team.get('image_path'),
+                'winner': home_team.get('meta', {}).get('winner', None)
+            },
+            'away_team': {
+                'id': away_team.get('id'),
+                'name': away_team.get('name'),
+                'logo': away_team.get('image_path'),
+                'winner': away_team.get('meta', {}).get('winner', None)
+            },
+            'odds': odds_list,
+            'has_odds': fixture_data.get('has_odds', False)
+        })
+    
+    return jsonify({
+        'round': round_info,
+        'fixtures': fixtures_with_odds,
+        'count': len(fixtures_with_odds),
+        'market_id': market_id,
+        'bookmaker_id': bookmaker_id,
         'updated_at': datetime.utcnow().isoformat()
     }), 200
 
