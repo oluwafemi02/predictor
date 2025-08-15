@@ -1,5 +1,6 @@
 import os
 import atexit
+from datetime import datetime
 from flask import Flask, jsonify, send_from_directory, request, make_response
 from flask_cors import CORS
 from models import db
@@ -41,12 +42,18 @@ def create_app(config_name=None):
         if request.method == "OPTIONS":
             response = make_response()
             origin = request.headers.get('Origin')
-            if origin in app.config['CORS_ORIGINS']:
-                response.headers.add("Access-Control-Allow-Origin", origin)
-                response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-API-Key")
-                response.headers.add('Access-Control-Allow-Methods', "GET,POST,PUT,DELETE,OPTIONS")
-                response.headers.add('Access-Control-Allow-Credentials', 'true')
-                response.headers.add('Access-Control-Max-Age', '3600')
+            # Log the incoming origin for debugging
+            logger.info(f"OPTIONS request from origin: {origin}")
+            
+            if origin and origin in app.config['CORS_ORIGINS']:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Headers'] = "Content-Type,Authorization,X-API-Key,Accept"
+                response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS"
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Max-Age'] = '3600'
+                logger.info(f"CORS headers set for origin: {origin}")
+            else:
+                logger.warning(f"Origin {origin} not in allowed origins: {app.config['CORS_ORIGINS']}")
             return response
     
     # Initialize JWT authentication
@@ -181,6 +188,22 @@ def create_app(config_name=None):
         print(f"Warning: Monitoring not available: {str(e)}")
     except Exception as e:
         print(f"Error initializing monitoring: {str(e)}")
+    
+    # CORS test endpoint
+    @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
+    def test_cors():
+        """Simple endpoint to test CORS configuration"""
+        import time
+        start_time = time.time()
+        response = jsonify({
+            'status': 'success',
+            'message': 'CORS is working correctly',
+            'timestamp': datetime.utcnow().isoformat(),
+            'origin': request.headers.get('Origin', 'No origin header'),
+            'allowed_origins': app.config.get('CORS_ORIGINS', [])
+        })
+        response.headers['X-Response-Time'] = f"{time.time() - start_time:.3f}"
+        return response
     
     @app.route('/')
     def index():
