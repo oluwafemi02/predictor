@@ -89,15 +89,38 @@ const SquadView: React.FC = () => {
 
   const fetchTeamSquad = async (teamId: number) => {
     setLoadingSquad(true);
+    setError(null);
     try {
       const response = await axios.get(
         `${process.env.REACT_APP_API_URL}/api/sportmonks/teams/${teamId}?include=squad,venue,league,stats`
       );
-      setSelectedTeam(response.data);
-      setShowModal(true);
-    } catch (err) {
+      console.log('Team data received:', response.data);
+      
+      if (response.data) {
+        setSelectedTeam(response.data);
+        
+        // Check if squad data exists
+        if (!response.data.squad || response.data.squad.length === 0) {
+          console.warn('No squad data available for team:', response.data.name);
+        }
+        
+        setShowModal(true);
+      } else {
+        setError('No team data received');
+      }
+    } catch (err: any) {
       console.error('Error fetching team squad:', err);
-      setError('Failed to fetch squad data');
+      let errorMessage = 'Failed to fetch squad data';
+      
+      if (err.response) {
+        errorMessage = err.response.data?.message || err.response.data?.error || `Server error: ${err.response.status}`;
+      } else if (err.request) {
+        errorMessage = 'Unable to reach the server. Please check your connection.';
+      } else {
+        errorMessage = err.message || 'An unexpected error occurred';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoadingSquad(false);
     }
@@ -284,7 +307,7 @@ const SquadView: React.FC = () => {
                 <span className="visually-hidden">Loading squad...</span>
               </Spinner>
             </div>
-          ) : selectedTeam && selectedTeam.squad ? (
+          ) : selectedTeam && selectedTeam.squad && selectedTeam.squad.length > 0 ? (
             <>
               {Object.entries(groupPlayersByPosition(selectedTeam.squad)).map(
                 ([position, players]) => (
@@ -323,8 +346,19 @@ const SquadView: React.FC = () => {
                 )
               )}
             </>
+          ) : selectedTeam ? (
+            <Alert variant="info">
+              No squad data available for this team.
+              {selectedTeam.is_mock_data && (
+                <p className="mt-2 mb-0 small">
+                  Note: Using mock data. Configure SportMonks API key for real data.
+                </p>
+              )}
+            </Alert>
           ) : (
-            <Alert variant="info">No squad data available for this team.</Alert>
+            <Alert variant="warning">
+              Unable to load team data.
+            </Alert>
           )}
         </Modal.Body>
         <Modal.Footer>

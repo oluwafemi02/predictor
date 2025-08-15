@@ -104,7 +104,8 @@ class ProductionConfig(Config):
         CORS_ORIGINS = [
             'https://football-prediction-frontend.onrender.com',
             'https://football-prediction-frontend-2cvi.onrender.com',
-            'https://football-prediction-frontend-zx5z.onrender.com'
+            'https://football-prediction-frontend-zx5z.onrender.com',
+            'https://football-prediction-backend-2cvi.onrender.com'  # Allow backend self-requests
         ]
         print("Warning: CORS_ORIGINS not set, using default production origins")
 
