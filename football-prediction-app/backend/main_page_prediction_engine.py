@@ -105,12 +105,12 @@ class MainPagePrediction:
     over_25_probability: float
     under_25_probability: float
     over_35_probability: float
-    correct_score_predictions: List[Dict] = field(default_factory=list)
     # Confidence and summary
     confidence_level: str  # "high", "medium", "low"
     confidence_score: float  # 0-100
     prediction_summary: str
     # Detailed breakdown
+    correct_score_predictions: List[Dict] = field(default_factory=list)
     factors_breakdown: Dict = field(default_factory=dict)
     data_completeness: float = 0.0  # Percentage of data available
     value_bets: List[Dict] = field(default_factory=list)
