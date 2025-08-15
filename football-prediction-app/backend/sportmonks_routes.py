@@ -11,6 +11,7 @@ import logging
 from flask_cors import cross_origin
 from functools import wraps
 import time
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -509,6 +510,53 @@ def get_past_fixtures():
             'count': 0
         }), 200  # Return 200 with empty data to avoid CORS preflight issues
 
+def _get_status_name(state_id: int) -> str:
+    """Convert state_id to status name"""
+    status_map = {
+        1: 'NS',  # Not Started
+        2: 'LIVE',
+        3: 'HT',  # Half Time
+        4: 'FT',  # Full Time
+        5: 'ET',  # Extra Time
+        6: 'PEN',  # Penalties
+        7: 'FT_PEN',  # Full Time after Penalties
+        8: 'CANCL',  # Cancelled
+        9: 'POSTP',  # Postponed
+        10: 'INT',  # Interrupted
+        11: 'ABAN',  # Abandoned
+        12: 'SUSP',  # Suspended
+        13: 'AWARDED',
+        14: 'DELAYED',
+        15: 'TBA',  # To Be Announced
+        16: 'WO',  # Walkover
+        17: 'AU',  # Awaiting Updates
+        18: 'Deleted'
+    }
+    return status_map.get(state_id, 'NS')
+
+def _transform_scores(scores: List[Dict]) -> Dict:
+    """Transform scores array to our format"""
+    if not scores:
+        return {}
+    
+    # Find the most recent score (usually FT)
+    for score in scores:
+        if score.get('description') == 'CURRENT':
+            return {
+                'localteam_score': score.get('score', {}).get('participant', {}).get('home'),
+                'visitorteam_score': score.get('score', {}).get('participant', {}).get('away')
+            }
+    
+    # Fallback to first score if no CURRENT found
+    if scores:
+        first_score = scores[0]
+        return {
+            'localteam_score': first_score.get('score', {}).get('participant', {}).get('home'),
+            'visitorteam_score': first_score.get('score', {}).get('participant', {}).get('away')
+        }
+    
+    return {}
+
 @sportmonks_bp.route('/fixtures/all', methods=['GET'])
 @cross_origin()
 @handle_errors
@@ -518,15 +566,16 @@ def get_all_fixtures():
     try:
         days_back = int(request.args.get('days_back', 7))
         days_ahead = int(request.args.get('days_ahead', 7))
-        league_id = request.args.get('league_id')
+        league_id = int(request.args.get('league_id', 8))  # Default to EPL
+        team_id = request.args.get('team_id')
         include_predictions = request.args.get('predictions', 'false').lower() == 'true'
         
         # Calculate date range
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = (today - timedelta(days=days_back)).strftime('%Y-%m-%d')
-        end_date = (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_ahead)
         
-        logger.info(f"Fetching all fixtures from {start_date} to {end_date}")
+        logger.info(f"Fetching all fixtures from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         
         # Check if API key is configured
         import os
@@ -545,60 +594,87 @@ def get_all_fixtures():
                     'total': 0
                 },
                 'date_range': {
-                    'start': start_date,
-                    'end': end_date
+                    'start': start_date.strftime('%Y-%m-%d'),
+                    'end': end_date.strftime('%Y-%m-%d')
                 },
                 'is_mock_data': True
             }), 200
         
-        # Get fixtures from API
-        league_ids = [int(league_id)] if league_id else None
-        include_params = ['localTeam', 'visitorTeam', 'league', 'venue', 'scores']
+        # Get current season ID for the league
+        season_id = sportmonks_client.get_current_season_id(league_id)
+        if not season_id:
+            # Fallback to known season IDs
+            season_ids = {
+                8: 25583,  # EPL 2025-26 season
+                564: 23764,  # La Liga
+                82: 23625,  # Bundesliga
+            }
+            season_id = season_ids.get(league_id, 25583)
         
-        fixtures = sportmonks_client.get_fixtures_by_date_range(
-            start_date=start_date,
-            end_date=end_date,
-            league_ids=league_ids,
-            include=include_params
-        )
+        logger.info(f"Using season ID: {season_id} for league ID: {league_id}")
         
-        logger.info(f"Retrieved {len(fixtures)} total fixtures from API")
+        # Get fixtures from season schedule
+        fixtures = []
+        if team_id:
+            # Get fixtures for specific team
+            fixtures = sportmonks_client.get_season_schedule(season_id, int(team_id))
+        else:
+            # Get all fixtures for the season
+            fixtures = sportmonks_client.get_season_schedule(season_id)
         
-        # Categorize fixtures
+        logger.info(f"Retrieved {len(fixtures)} total fixtures from season schedule")
+        
+        # Categorize and transform fixtures
         past_fixtures = []
         today_fixtures = []
         upcoming_fixtures = []
         today_str = today.strftime('%Y-%m-%d')
         
         for fixture_data in fixtures:
-            fixture_date = datetime.fromisoformat(fixture_data['starting_at'].replace('Z', '+00:00'))
-            fixture_date_str = fixture_date.strftime('%Y-%m-%d')
+            # Parse fixture date
+            fixture_datetime = datetime.fromisoformat(fixture_data.get('starting_at', '').replace(' ', 'T'))
+            fixture_date_str = fixture_datetime.strftime('%Y-%m-%d')
+            
+            # Filter by date range
+            if fixture_datetime.date() < start_date.date() or fixture_datetime.date() > end_date.date():
+                continue
+            
+            # Transform fixture data to match our format
+            participants = fixture_data.get('participants', [])
+            home_team = next((p for p in participants if p.get('meta', {}).get('location') == 'home'), {})
+            away_team = next((p for p in participants if p.get('meta', {}).get('location') == 'away'), {})
             
             fixture = {
-                'id': fixture_data['id'],
-                'date': fixture_data['starting_at'],
-                'status': fixture_data.get('state', {}).get('state', 'NS'),
+                'id': fixture_data.get('id'),
+                'fixture_id': fixture_data.get('id'),
+                'date': fixture_data.get('starting_at'),
+                'status': _get_status_name(fixture_data.get('state_id', 1)),
                 'league': {
-                    'id': fixture_data.get('league', {}).get('data', {}).get('id') if 'league' in fixture_data else None,
-                    'name': fixture_data.get('league', {}).get('data', {}).get('name') if 'league' in fixture_data else None,
-                    'logo': fixture_data.get('league', {}).get('data', {}).get('logo_path') if 'league' in fixture_data else None
+                    'id': fixture_data.get('league_id', league_id),
+                    'name': 'Premier League' if fixture_data.get('league_id') == 8 else f'League {fixture_data.get("league_id")}',
+                    'logo': None
                 },
                 'home_team': {
-                    'id': fixture_data.get('localTeam', {}).get('data', {}).get('id') if 'localTeam' in fixture_data else None,
-                    'name': fixture_data.get('localTeam', {}).get('data', {}).get('name') if 'localTeam' in fixture_data else None,
-                    'logo': fixture_data.get('localTeam', {}).get('data', {}).get('logo_path') if 'localTeam' in fixture_data else None
+                    'id': home_team.get('id'),
+                    'name': home_team.get('name', 'Unknown'),
+                    'logo': home_team.get('image_path'),
+                    'short_code': home_team.get('short_code')
                 },
                 'away_team': {
-                    'id': fixture_data.get('visitorTeam', {}).get('data', {}).get('id') if 'visitorTeam' in fixture_data else None,
-                    'name': fixture_data.get('visitorTeam', {}).get('data', {}).get('name') if 'visitorTeam' in fixture_data else None,
-                    'logo': fixture_data.get('visitorTeam', {}).get('data', {}).get('logo_path') if 'visitorTeam' in fixture_data else None
+                    'id': away_team.get('id'),
+                    'name': away_team.get('name', 'Unknown'),
+                    'logo': away_team.get('image_path'),
+                    'short_code': away_team.get('short_code')
                 },
-                'scores': fixture_data.get('scores', {}),
-                'venue': fixture_data.get('venue', {}).get('data', {}) if 'venue' in fixture_data else {}
+                'scores': _transform_scores(fixture_data.get('scores', [])),
+                'venue': {
+                    'id': fixture_data.get('venue_id'),
+                    'name': fixture_data.get('name', '').split(' vs ')[0] if ' vs ' in fixture_data.get('name', '') else 'Unknown'
+                }
             }
             
             # Add predictions for upcoming/today fixtures if requested
-            if include_predictions and fixture_date >= today:
+            if include_predictions and fixture_datetime >= today:
                 fixture['predictions'] = None  # Would fetch from predictions API
             
             # Categorize by date
@@ -608,6 +684,11 @@ def get_all_fixtures():
                 today_fixtures.append(fixture)
             else:
                 upcoming_fixtures.append(fixture)
+        
+        # Sort fixtures by date
+        past_fixtures.sort(key=lambda x: x['date'], reverse=True)
+        today_fixtures.sort(key=lambda x: x['date'])
+        upcoming_fixtures.sort(key=lambda x: x['date'])
         
         logger.info(f"Categorized fixtures - Past: {len(past_fixtures)}, Today: {len(today_fixtures)}, Upcoming: {len(upcoming_fixtures)}")
         
@@ -621,13 +702,14 @@ def get_all_fixtures():
                 'past': len(past_fixtures),
                 'today': len(today_fixtures),
                 'upcoming': len(upcoming_fixtures),
-                'total': len(fixtures)
+                'total': len(past_fixtures) + len(today_fixtures) + len(upcoming_fixtures)
             },
             'date_range': {
-                'start': start_date,
-                'end': end_date,
+                'start': start_date.strftime('%Y-%m-%d'),
+                'end': end_date.strftime('%Y-%m-%d'),
                 'today': today_str
-            }
+            },
+            'season_id': season_id
         }), 200
     except Exception as e:
         logger.error(f"Error in get_all_fixtures: {str(e)}")

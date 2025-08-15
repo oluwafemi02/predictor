@@ -405,6 +405,40 @@ class SportMonksAPIClient:
         
         return predictions
     
+    def get_season_schedule(self, season_id: int, team_id: int = None) -> List[Dict]:
+        """Get season schedule for a specific team or all teams"""
+        endpoint = f'schedules/seasons/{season_id}'
+        if team_id:
+            endpoint += f'/teams/{team_id}'
+        
+        result = self._make_request(endpoint, {}, cache_ttl=3600)
+        
+        if result and 'data' in result:
+            # Extract all fixtures from rounds
+            all_fixtures = []
+            for stage in result['data']:
+                if 'rounds' in stage:
+                    for round_data in stage['rounds']:
+                        if 'fixtures' in round_data:
+                            all_fixtures.extend(round_data['fixtures'])
+            return all_fixtures
+        
+        return []
+    
+    def get_current_season_id(self, league_id: int) -> Optional[int]:
+        """Get the current season ID for a league"""
+        params = {
+            'filter[league_id]': league_id,
+            'filter[is_current]': 'true'
+        }
+        
+        result = self._make_request('seasons', params, cache_ttl=86400)
+        
+        if result and 'data' in result and len(result['data']) > 0:
+            return result['data'][0]['id']
+        
+        return None
+    
     # Health check and status methods
     
     def health_check(self) -> Dict[str, Any]:
