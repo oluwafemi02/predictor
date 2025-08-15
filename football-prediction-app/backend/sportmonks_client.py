@@ -416,3 +416,25 @@ class SportMonksAPIClient:
             result['api_status'] = 'unhealthy'
         
         return result
+    
+    # Generic method for accessing any endpoint
+    def get(self, endpoint: str, params: Dict = None, include: List[str] = None, cache_ttl: int = 300) -> Optional[Dict]:
+        """
+        Generic method to access any SportMonks API endpoint
+        
+        Args:
+            endpoint: The API endpoint (e.g., 'schedules/teams/123')
+            params: Additional query parameters
+            include: List of relations to include
+            cache_ttl: Cache time-to-live in seconds
+        """
+        if params is None:
+            params = {}
+        
+        if include:
+            if isinstance(include, list):
+                params['include'] = ','.join(include)
+            else:
+                params['include'] = include
+        
+        return self._make_request(endpoint, params, cache_ttl=cache_ttl)

@@ -37,6 +37,7 @@ interface Team {
     city: string;
     capacity: number;
   };
+  is_mock_data?: boolean;
 }
 
 interface TeamWithSquad extends Team {
