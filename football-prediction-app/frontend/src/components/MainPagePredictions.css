@@ -1,0 +1,311 @@
+.main-page-predictions {
+  min-height: 80vh;
+}
+
+/* Prediction Cards */
+.prediction-card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.prediction-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.prediction-header {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #dee2e6;
+  padding: 12px 16px;
+}
+
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* Match Teams Display */
+.match-teams h5 {
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.vs-text {
+  color: #6c757d;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: inline-block;
+  margin: 8px 0;
+}
+
+/* Main Prediction */
+.main-prediction-badge {
+  font-size: 1rem;
+  padding: 8px 16px;
+  border-radius: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Probability Bars */
+.probability-bars {
+  background-color: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.prob-item small {
+  font-size: 0.8rem;
+  color: #495057;
+}
+
+.progress {
+  height: 8px;
+  background-color: #e9ecef;
+}
+
+/* Additional Markets */
+.additional-markets {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e9ecef;
+}
+
+.market-stat {
+  text-align: center;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.market-stat small {
+  display: block;
+  color: #6c757d;
+  font-size: 0.75rem;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+/* Value Bet Alert */
+.value-bet-alert {
+  margin-bottom: 0;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+}
+
+/* Featured Prediction Card */
+.featured-prediction-card {
+  border: 2px solid #ffc107;
+  background: linear-gradient(to bottom, #fffdf7 0%, #ffffff 100%);
+}
+
+.featured-header {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border-bottom: 1px solid #ffc107;
+  padding: 16px;
+}
+
+.featured-prediction-display {
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.prediction-type {
+  color: #495057;
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.predicted-team {
+  color: #2c3e50;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.probability-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.probability-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #28a745;
+  line-height: 1;
+}
+
+.probability-label {
+  font-size: 0.875rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Prediction Summary */
+.prediction-summary {
+  padding: 16px;
+  background-color: #e7f3ff;
+  border-radius: 8px;
+  border-left: 4px solid #0066cc;
+}
+
+.prediction-summary p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Value Bets Section */
+.value-bets-section h6 {
+  font-size: 0.875rem;
+  color: #495057;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+/* Data Completeness */
+.data-completeness {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e9ecef;
+}
+
+/* Navigation Pills */
+.nav-pills .nav-link {
+  border-radius: 24px;
+  padding: 8px 24px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  margin: 0 4px;
+}
+
+.nav-pills .nav-link.active {
+  background-color: #0066cc;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.3);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .prediction-card {
+    margin-bottom: 16px;
+  }
+  
+  .featured-prediction-card {
+    margin-bottom: 20px;
+  }
+  
+  .probability-value {
+    font-size: 2rem;
+  }
+  
+  .main-prediction-badge {
+    font-size: 0.875rem;
+    padding: 6px 12px;
+  }
+  
+  .nav-pills .nav-link {
+    padding: 6px 16px;
+    font-size: 0.875rem;
+  }
+}
+
+/* Loading State */
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+/* Empty State */
+.alert-info {
+  background-color: #e7f3ff;
+  border-color: #b8daff;
+  color: #004085;
+}
+
+/* Hover Effects */
+.badge:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
+
+.value-bets-section .badge {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.value-bets-section .badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.prediction-card,
+.featured-prediction-card {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .prediction-card,
+  .featured-prediction-card {
+    background-color: #1a1a1a;
+    color: #e9ecef;
+  }
+  
+  .prediction-header,
+  .featured-header {
+    background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
+    border-bottom-color: #495057;
+  }
+  
+  .match-teams h5,
+  .stat-value,
+  .predicted-team {
+    color: #e9ecef;
+  }
+  
+  .probability-bars,
+  .market-stat,
+  .featured-prediction-display {
+    background-color: #2c2c2c;
+  }
+  
+  .prediction-summary {
+    background-color: #1a3a52;
+    border-left-color: #0066cc;
+  }
+  
+  .progress {
+    background-color: #495057;
+  }
+}

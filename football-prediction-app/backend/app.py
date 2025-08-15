@@ -120,6 +120,14 @@ def create_app(config_name=None):
     except ImportError as e:
         print(f"Warning: Advanced predictions routes not available: {str(e)}")
     
+    # Register main page predictions routes
+    try:
+        from main_page_predictions_routes import main_predictions_bp
+        app.register_blueprint(main_predictions_bp)
+        print("Main page predictions routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: Main page predictions routes not available: {str(e)}")
+    
     # Error handlers
     @app.errorhandler(ValidationError)
     def handle_validation_error(error):

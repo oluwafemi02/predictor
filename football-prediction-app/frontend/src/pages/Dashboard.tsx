@@ -35,6 +35,7 @@ import {
 import { format, isToday, isTomorrow, isThisWeek } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { getUpcomingPredictions, getMatches, getModelStatus, getUpcomingMatches } from '../services/api';
+import MainPagePredictions from '../components/MainPagePredictions';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -280,157 +281,14 @@ const Dashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Upcoming Predictions Section - Featured */}
-      {upcomingPredictions && upcomingPredictions.length > 0 && (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3, background: alpha(theme.palette.background.paper, 0.5) }}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <SportsSoccer sx={{ color: theme.palette.primary.main }} />
-                  <Typography variant="h5" fontWeight="bold">
-                    Today's Featured Predictions
-                  </Typography>
-                </Box>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  endIcon={<ArrowForward />}
-                  onClick={() => navigate('/predictions')}
-                  size={isMobile ? 'small' : 'medium'}
-                >
-                  View All
-                </Button>
-              </Box>
-
-              <Grid container spacing={2}>
-                {upcomingPredictions.slice(0, 3).map((prediction: any) => (
-                  <Grid item xs={12} md={4} key={prediction.match_id}>
-                    <Card 
-                      sx={{ 
-                        height: '100%',
-                        cursor: 'pointer',
-                                              '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                      },
-                      }}
-                      onClick={() => navigate(`/matches/${prediction.match_id}`)}
-                    >
-                      <CardContent>
-                        <Box mb={2}>
-                          <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                            <Chip 
-                              icon={<AccessTime />}
-                              label={getDateLabel(prediction.match_date)} 
-                              size="small" 
-                              color="primary" 
-                              variant="outlined" 
-                            />
-                            <Typography variant="caption" color="text.secondary">
-                              {format(new Date(prediction.match_date), 'HH:mm')}
-                            </Typography>
-                          </Box>
-                          <Typography variant="h6" gutterBottom sx={{ mt: 1 }}>
-                            {prediction.home_team}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>
-                            vs
-                          </Typography>
-                          <Typography variant="h6" gutterBottom>
-                            {prediction.away_team}
-                          </Typography>
-                        </Box>
-
-                        <Divider sx={{ my: 2 }} />
-
-                        {/* Prediction Probabilities */}
-                        <Box>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>
-                            Match Outcome Probabilities
-                          </Typography>
-                          <Grid container spacing={1} sx={{ mt: 1 }}>
-                            <Grid item xs={4}>
-                              <Box textAlign="center">
-                                <Typography variant="caption" color="text.secondary">
-                                  Home
-                                </Typography>
-                                <Typography 
-                                  variant="h6" 
-                                  color={getProbabilityColor(prediction.predictions?.ensemble?.home_win_probability || 0)}
-                                  fontWeight="bold"
-                                >
-                                  {formatProbability(prediction.predictions?.ensemble?.home_win_probability || 0)}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                            <Grid item xs={4}>
-                              <Box textAlign="center">
-                                <Typography variant="caption" color="text.secondary">
-                                  Draw
-                                </Typography>
-                                <Typography 
-                                  variant="h6" 
-                                  color={getProbabilityColor(prediction.predictions?.ensemble?.draw_probability || 0)}
-                                  fontWeight="bold"
-                                >
-                                  {formatProbability(prediction.predictions?.ensemble?.draw_probability || 0)}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                            <Grid item xs={4}>
-                              <Box textAlign="center">
-                                <Typography variant="caption" color="text.secondary">
-                                  Away
-                                </Typography>
-                                <Typography 
-                                  variant="h6" 
-                                  color={getProbabilityColor(prediction.predictions?.ensemble?.away_win_probability || 0)}
-                                  fontWeight="bold"
-                                >
-                                  {formatProbability(prediction.predictions?.ensemble?.away_win_probability || 0)}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                          </Grid>
-
-                          {/* Confidence Score */}
-                          <Box mt={2}>
-                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
-                              <Typography variant="caption" color="text.secondary">
-                                Confidence Score
-                              </Typography>
-                              <Typography variant="caption" fontWeight="bold">
-                                {formatProbability(prediction.predictions?.ensemble?.confidence || 0.75)}
-                              </Typography>
-                            </Box>
-                            <LinearProgress
-                              variant="determinate"
-                              value={(prediction.predictions?.ensemble?.confidence || 0.75) * 100}
-                              sx={{ 
-                                height: 6, 
-                                borderRadius: 3,
-                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                              }}
-                              color={
-                                (prediction.predictions?.ensemble?.confidence || 0.75) > 0.7
-                                  ? 'success'
-                                  : (prediction.predictions?.ensemble?.confidence || 0.75) > 0.5
-                                  ? 'warning'
-                                  : 'error'
-                              }
-                            />
-                          </Box>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Paper>
-          </Grid>
+      {/* Enhanced AI Predictions Section */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3, background: alpha(theme.palette.background.paper, 0.5) }}>
+            <MainPagePredictions />
+          </Paper>
         </Grid>
-      )}
+      </Grid>
 
       {/* Upcoming Matches Section */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
