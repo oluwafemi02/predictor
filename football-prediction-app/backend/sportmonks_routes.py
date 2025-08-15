@@ -12,6 +12,7 @@ from flask_cors import cross_origin
 from functools import wraps
 import time
 from typing import List, Dict
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -393,17 +394,54 @@ def get_upcoming_fixtures():
                 'venue': fixture_data.get('venue', {}).get('data', {}) if 'venue' in fixture_data else {}
             }
             
-            # Add predictions from our map if available
-            if include_predictions and fixture_data['id'] in predictions_map:
-                fixture['predictions'] = predictions_map[fixture_data['id']]
+            # Add predictions for upcoming/today fixtures if requested
+            if include_predictions and fixture_data['state'] != 'finished':
+                try:
+                    # Call the predictions endpoint internally
+                    with current_app.test_request_context():
+                        pred_response = get_fixture_predictions(fixture['id'])
+                        if pred_response[1] == 200:
+                            pred_data = json.loads(pred_response[0].data)
+                            fixture['predictions'] = pred_data.get('predictions', {})
+                            fixture['prediction_confidence'] = pred_data.get('confidence', 'low')
+                        else:
+                            fixture['predictions'] = None
+                            fixture['prediction_confidence'] = None
+                except Exception as e:
+                    logger.error(f"Error fetching predictions for fixture {fixture['id']}: {str(e)}")
+                    fixture['predictions'] = None
+                    fixture['prediction_confidence'] = None
             
-            processed_fixtures.append(fixture)
+            # Categorize by date
+            today_str = today.strftime('%Y-%m-%d')
+            fixture_date_str = fixture_data['starting_at']
+            
+            if fixture_date_str < today_str:
+                past_fixtures.append(fixture)
+            elif fixture_date_str == today_str:
+                today_fixtures.append(fixture)
+            else:
+                upcoming_fixtures.append(fixture)
         
-        logger.info(f"Processed {len(processed_fixtures)} fixtures")
+        # Sort fixtures by date
+        past_fixtures.sort(key=lambda x: x['date'], reverse=True)
+        today_fixtures.sort(key=lambda x: x['date'])
+        upcoming_fixtures.sort(key=lambda x: x['date'])
+        
+        logger.info(f"Categorized fixtures - Past: {len(past_fixtures)}, Today: {len(today_fixtures)}, Upcoming: {len(upcoming_fixtures)}")
         
         return jsonify({
-            'fixtures': processed_fixtures,
-            'count': len(processed_fixtures),
+            'fixtures': {
+                'past': past_fixtures,
+                'today': today_fixtures,
+                'upcoming': upcoming_fixtures
+            },
+            'count': {
+                'past': len(past_fixtures),
+                'today': len(today_fixtures),
+                'upcoming': len(upcoming_fixtures),
+                'total': len(past_fixtures) + len(today_fixtures) + len(upcoming_fixtures)
+            },
             'date_range': {
                 'start': start_date,
                 'end': end_date
@@ -674,8 +712,22 @@ def get_all_fixtures():
             }
             
             # Add predictions for upcoming/today fixtures if requested
-            if include_predictions and fixture_datetime >= today:
-                fixture['predictions'] = None  # Would fetch from predictions API
+            if include_predictions and fixture_datetime >= today and fixture['state'] != 'finished':
+                try:
+                    # Call the predictions endpoint internally
+                    with current_app.test_request_context():
+                        pred_response = get_fixture_predictions(fixture['id'])
+                        if pred_response[1] == 200:
+                            pred_data = json.loads(pred_response[0].data)
+                            fixture['predictions'] = pred_data.get('predictions', {})
+                            fixture['prediction_confidence'] = pred_data.get('confidence', 'low')
+                        else:
+                            fixture['predictions'] = None
+                            fixture['prediction_confidence'] = None
+                except Exception as e:
+                    logger.error(f"Error fetching predictions for fixture {fixture['id']}: {str(e)}")
+                    fixture['predictions'] = None
+                    fixture['prediction_confidence'] = None
             
             # Categorize by date
             if fixture_date_str < today_str:
@@ -768,35 +820,155 @@ def get_fixture_predictions(fixture_id):
         }), 200
     
     # Get fresh prediction from API
-    response = sportmonks_client.get_predictions_by_fixture(fixture_id)
+    response = sportmonks_client.get_fixture_with_predictions(fixture_id)
     
     if not response or 'data' not in response:
         return jsonify({'error': 'No predictions available for this fixture'}), 404
     
-    prediction_data = response['data']['predictions']
+    fixture_data = response['data']
+    predictions_list = fixture_data.get('predictions', [])
+    
+    # Parse predictions by type
+    parsed_predictions = {
+        'match_winner': {'home_win': 0, 'draw': 0, 'away_win': 0},
+        'goals': {
+            'over_15': 0, 'under_15': 0,
+            'over_25': 0, 'under_25': 0,
+            'over_35': 0, 'under_35': 0,
+            'over_45': 0, 'under_45': 0
+        },
+        'btts': {'yes': 0, 'no': 0},
+        'correct_scores': [],
+        'double_chance': {},
+        'first_half': {},
+        'corners': {},
+        'team_goals': {
+            'home': {},
+            'away': {}
+        }
+    }
+    
+    # Process each prediction
+    for pred in predictions_list:
+        pred_type = pred.get('type', {})
+        type_code = pred_type.get('code', '')
+        predictions = pred.get('predictions', {})
+        
+        # Fulltime result
+        if type_code == 'fulltime-result-probability':
+            parsed_predictions['match_winner'] = {
+                'home_win': predictions.get('home', 0),
+                'draw': predictions.get('draw', 0),
+                'away_win': predictions.get('away', 0)
+            }
+        
+        # BTTS
+        elif type_code == 'both-teams-to-score-probability':
+            parsed_predictions['btts'] = {
+                'yes': predictions.get('yes', 0),
+                'no': predictions.get('no', 0)
+            }
+        
+        # Over/Under goals
+        elif type_code == 'over-under-1_5-probability':
+            parsed_predictions['goals']['over_15'] = predictions.get('yes', 0)
+            parsed_predictions['goals']['under_15'] = predictions.get('no', 0)
+        elif type_code == 'over-under-2_5-probability':
+            parsed_predictions['goals']['over_25'] = predictions.get('yes', 0)
+            parsed_predictions['goals']['under_25'] = predictions.get('no', 0)
+        elif type_code == 'over-under-3_5_probability':
+            parsed_predictions['goals']['over_35'] = predictions.get('yes', 0)
+            parsed_predictions['goals']['under_35'] = predictions.get('no', 0)
+        elif type_code == 'over-under-4_5-probability':
+            parsed_predictions['goals']['over_45'] = predictions.get('yes', 0)
+            parsed_predictions['goals']['under_45'] = predictions.get('no', 0)
+        
+        # Correct score
+        elif type_code == 'correct-score-probability':
+            scores = predictions.get('scores', {})
+            correct_scores = []
+            for score, prob in scores.items():
+                if score not in ['Other_1', 'Other_2', 'Other_X']:
+                    correct_scores.append({
+                        'score': score,
+                        'probability': prob
+                    })
+            # Sort by probability
+            correct_scores.sort(key=lambda x: x['probability'], reverse=True)
+            parsed_predictions['correct_scores'] = correct_scores[:10]  # Top 10
+        
+        # Double chance
+        elif type_code == 'double_chance-probability':
+            parsed_predictions['double_chance'] = {
+                'home_or_draw': predictions.get('draw_home', 0),
+                'away_or_draw': predictions.get('draw_away', 0),
+                'home_or_away': predictions.get('home_away', 0)
+            }
+        
+        # First half winner
+        elif type_code == 'first-half-winner':
+            parsed_predictions['first_half'] = {
+                'home': predictions.get('home', 0),
+                'draw': predictions.get('draw', 0),
+                'away': predictions.get('away', 0)
+            }
+        
+        # Corners
+        elif 'corners-over-under' in type_code:
+            corner_num = type_code.split('-')[3].replace('_', '.')
+            parsed_predictions['corners'][f'over_{corner_num}'] = predictions.get('yes', 0)
+            parsed_predictions['corners'][f'under_{corner_num}'] = predictions.get('no', 0)
+        
+        # Team goals
+        elif 'home-over-under' in type_code:
+            goal_num = type_code.split('-')[3].replace('_', '.')
+            parsed_predictions['team_goals']['home'][f'over_{goal_num}'] = predictions.get('yes', 0)
+            parsed_predictions['team_goals']['home'][f'under_{goal_num}'] = predictions.get('no', 0)
+        elif 'away-over-under' in type_code:
+            goal_num = type_code.split('-')[3].replace('_', '.')
+            parsed_predictions['team_goals']['away'][f'over_{goal_num}'] = predictions.get('yes', 0)
+            parsed_predictions['team_goals']['away'][f'under_{goal_num}'] = predictions.get('no', 0)
+    
+    # Calculate confidence level based on strongest prediction
+    max_prob = max(
+        parsed_predictions['match_winner']['home_win'],
+        parsed_predictions['match_winner']['draw'],
+        parsed_predictions['match_winner']['away_win']
+    )
+    confidence = 'high' if max_prob > 60 else 'medium' if max_prob > 45 else 'low'
     
     # Store in database for caching
     if db_prediction:
-        db_prediction.home_win_probability = prediction_data.get('home', 0)
-        db_prediction.draw_probability = prediction_data.get('draw', 0)
-        db_prediction.away_win_probability = prediction_data.get('away', 0)
-        db_prediction.over_25_probability = prediction_data.get('over_25', 0)
-        db_prediction.under_25_probability = prediction_data.get('under_25', 0)
-        db_prediction.btts_yes_probability = prediction_data.get('btts_yes', 0)
-        db_prediction.btts_no_probability = prediction_data.get('btts_no', 0)
-        db_prediction.correct_scores = prediction_data.get('correct_scores', [])
+        db_prediction.home_win_probability = parsed_predictions['match_winner']['home_win']
+        db_prediction.draw_probability = parsed_predictions['match_winner']['draw']
+        db_prediction.away_win_probability = parsed_predictions['match_winner']['away_win']
+        db_prediction.over_15_probability = parsed_predictions['goals']['over_15']
+        db_prediction.under_15_probability = parsed_predictions['goals']['under_15']
+        db_prediction.over_25_probability = parsed_predictions['goals']['over_25']
+        db_prediction.under_25_probability = parsed_predictions['goals']['under_25']
+        db_prediction.over_35_probability = parsed_predictions['goals']['over_35']
+        db_prediction.under_35_probability = parsed_predictions['goals']['under_35']
+        db_prediction.btts_yes_probability = parsed_predictions['btts']['yes']
+        db_prediction.btts_no_probability = parsed_predictions['btts']['no']
+        db_prediction.correct_scores = parsed_predictions['correct_scores']
+        db_prediction.confidence_level = confidence
         db_prediction.updated_at = datetime.utcnow()
     else:
         db_prediction = SportMonksPrediction(
             fixture_id=fixture_id,
-            home_win_probability=prediction_data.get('home', 0),
-            draw_probability=prediction_data.get('draw', 0),
-            away_win_probability=prediction_data.get('away', 0),
-            over_25_probability=prediction_data.get('over_25', 0),
-            under_25_probability=prediction_data.get('under_25', 0),
-            btts_yes_probability=prediction_data.get('btts_yes', 0),
-            btts_no_probability=prediction_data.get('btts_no', 0),
-            correct_scores=prediction_data.get('correct_scores', [])
+            home_win_probability=parsed_predictions['match_winner']['home_win'],
+            draw_probability=parsed_predictions['match_winner']['draw'],
+            away_win_probability=parsed_predictions['match_winner']['away_win'],
+            over_15_probability=parsed_predictions['goals']['over_15'],
+            under_15_probability=parsed_predictions['goals']['under_15'],
+            over_25_probability=parsed_predictions['goals']['over_25'],
+            under_25_probability=parsed_predictions['goals']['under_25'],
+            over_35_probability=parsed_predictions['goals']['over_35'],
+            under_35_probability=parsed_predictions['goals']['under_35'],
+            btts_yes_probability=parsed_predictions['btts']['yes'],
+            btts_no_probability=parsed_predictions['btts']['no'],
+            correct_scores=parsed_predictions['correct_scores'],
+            confidence_level=confidence
         )
         db.session.add(db_prediction)
     
@@ -808,7 +980,8 @@ def get_fixture_predictions(fixture_id):
     
     return jsonify({
         'fixture_id': fixture_id,
-        'predictions': prediction_data,
+        'predictions': parsed_predictions,
+        'confidence': confidence,
         'source': 'api',
         'updated_at': datetime.utcnow().isoformat()
     }), 200

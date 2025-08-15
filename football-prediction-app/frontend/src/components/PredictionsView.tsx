@@ -4,6 +4,7 @@ import { Brain, Calendar, TrendingUp, Target, DollarSign, AlertCircle } from 'lu
 import axios from 'axios';
 import './PredictionsView.css';
 import OddsDisplay from './OddsDisplay';
+import PredictionDetails from './PredictionDetails';
 
 interface Prediction {
   id: number;
@@ -43,6 +44,7 @@ interface Prediction {
       probability: number;
     }>;
   };
+  prediction_confidence?: number;
 }
 
 interface AllFixtures {
@@ -277,154 +279,15 @@ const PredictionsView: React.FC = () => {
                       </div>
                     </div>
                   </Card.Header>
-                  
                   <Card.Body>
-                    <div className="teams-matchup mb-4">
-                      <div className="team-info text-center">
-                        <img 
-                          src={prediction.home_team.logo || '/placeholder-team.png'} 
-                          alt={prediction.home_team.name}
-                          className="team-logo-small mb-2"
-                        />
-                        <div className="team-name-small">{prediction.home_team.name}</div>
-                        {hasScores && (
-                          <div className="team-score h3 mt-2">{prediction.scores.localteam_score}</div>
-                        )}
-                      </div>
-                      
-                      <div className="vs-divider">
-                        {hasScores ? (
-                          <span className="score-separator">-</span>
-                        ) : (
-                          <span>VS</span>
-                        )}
-                      </div>
-                      
-                      <div className="team-info text-center">
-                        <img 
-                          src={prediction.away_team.logo || '/placeholder-team.png'} 
-                          alt={prediction.away_team.name}
-                          className="team-logo-small mb-2"
-                        />
-                        <div className="team-name-small">{prediction.away_team.name}</div>
-                        {hasScores && (
-                          <div className="team-score h3 mt-2">{prediction.scores.visitorteam_score}</div>
-                        )}
-                      </div>
-                    </div>
+                    <PredictionDetails 
+                      predictions={prediction.predictions || {}}
+                      confidence={prediction.prediction_confidence}
+                      homeTeam={prediction.home_team.name}
+                      awayTeam={prediction.away_team.name}
+                    />
 
-                    <div className="prediction-section mb-4">
-                      <h6 className="section-title">
-                        <Target size={16} className="me-1" />
-                        Match Result Prediction
-                      </h6>
-                      {winner ? (
-                        <div className="winner-prediction text-center mb-3">
-                          <Badge bg={winner.variant} className="prediction-badge">
-                            {winner.type} - {winner.prob.toFixed(1)}%
-                          </Badge>
-                        </div>
-                      ) : (
-                        <div className="text-center text-muted">No prediction available.</div>
-                      )}
-                      <div className="probabilities">
-                        {winner && prediction.predictions?.match_winner && (
-                          <>
-                            <div className="prob-item">
-                              <span>Home Win</span>
-                              <ProgressBar 
-                                now={prediction.predictions.match_winner.home_win} 
-                                label={`${prediction.predictions.match_winner.home_win.toFixed(1)}%`}
-                                variant={getProbabilityColor(prediction.predictions.match_winner.home_win)}
-                              />
-                            </div>
-                            <div className="prob-item">
-                              <span>Draw</span>
-                              <ProgressBar 
-                                now={prediction.predictions.match_winner.draw} 
-                                label={`${prediction.predictions.match_winner.draw.toFixed(1)}%`}
-                                variant={getProbabilityColor(prediction.predictions.match_winner.draw)}
-                              />
-                            </div>
-                            <div className="prob-item">
-                              <span>Away Win</span>
-                              <ProgressBar 
-                                now={prediction.predictions.match_winner.away_win} 
-                                label={`${prediction.predictions.match_winner.away_win.toFixed(1)}%`}
-                                variant={getProbabilityColor(prediction.predictions.match_winner.away_win)}
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="prediction-section">
-                      <h6 className="section-title">
-                        <TrendingUp size={16} className="me-1" />
-                        Goals Predictions
-                      </h6>
-                      {prediction.predictions?.goals ? (
-                        <Row>
-                          <Col xs={6}>
-                            <div className="goal-prediction">
-                              <div className="goal-label">Over 2.5</div>
-                              <div className="goal-value">
-                                {prediction.predictions.goals.over_25.toFixed(1)}%
-                              </div>
-                            </div>
-                          </Col>
-                          <Col xs={6}>
-                            <div className="goal-prediction">
-                              <div className="goal-label">Under 2.5</div>
-                              <div className="goal-value">
-                                {prediction.predictions.goals.under_25.toFixed(1)}%
-                              </div>
-                            </div>
-                          </Col>
-                          <Col xs={6}>
-                            <div className="goal-prediction">
-                              <div className="goal-label">BTTS Yes</div>
-                              <div className="goal-value">
-                                {prediction.predictions.goals.btts_yes.toFixed(1)}%
-                              </div>
-                            </div>
-                          </Col>
-                          <Col xs={6}>
-                            <div className="goal-prediction">
-                              <div className="goal-label">BTTS No</div>
-                              <div className="goal-value">
-                                {prediction.predictions.goals.btts_no.toFixed(1)}%
-                              </div>
-                            </div>
-                          </Col>
-                        </Row>
-                      ) : (
-                        <div className="text-center text-muted">No prediction available.</div>
-                      )}
-                    </div>
-
-                    {prediction.predictions?.correct_scores && prediction.predictions.correct_scores.length > 0 && (
-                      <div className="prediction-section">
-                        <h6 className="section-title">
-                          <Target size={16} className="me-1" />
-                          Top Score Predictions
-                        </h6>
-                        <div className="correct-scores">
-                          {prediction.predictions.correct_scores.slice(0, 3).map((score: any, idx: number) => (
-                            <Badge 
-                              key={idx} 
-                              bg={idx === 0 ? 'success' : 'secondary'} 
-                              className="score-badge me-2"
-                            >
-                              {score.score}: {score.probability.toFixed(1)}%
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="prediction-section">
+                    <div className="prediction-section mt-4">
                       <h6 className="section-title">
                         <DollarSign size={16} className="me-1" />
                         Live Odds

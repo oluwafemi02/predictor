@@ -1,0 +1,92 @@
+.prediction-details {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.prediction-card {
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.prediction-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.prediction-card .card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  padding: 0.75rem 1rem;
+}
+
+.prediction-card .card-body {
+  padding: 1rem;
+}
+
+.confidence-badge {
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 20px;
+}
+
+.correct-scores-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.score-prediction {
+  text-align: center;
+  padding: 0.5rem;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+  transition: all 0.2s ease;
+}
+
+.score-prediction:hover {
+  background-color: #e9ecef;
+}
+
+.score-badge {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.prediction-details table td {
+  vertical-align: middle;
+  padding: 0.5rem;
+}
+
+.prediction-details .progress {
+  margin-top: 0.25rem;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 576px) {
+  .correct-scores-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .prediction-details h4 {
+    font-size: 1.25rem;
+  }
+}
+
+/* Loading animation */
+.prediction-details .text-center {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

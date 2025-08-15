@@ -492,6 +492,15 @@ class SportMonksAPIClient:
         endpoint = f'fixtures/{fixture_id}'
         return self._make_request(endpoint, params, cache_ttl=300)
     
+    def get_fixture_with_predictions(self, fixture_id: int) -> Dict:
+        """Get fixture details with predictions"""
+        params = {
+            'include': 'participants;league;venue;state;scores;predictions.type'
+        }
+        
+        endpoint = f'fixtures/{fixture_id}'
+        return self._make_request(endpoint, params, cache_ttl=600)
+    
     # Health check and status methods
     
     def health_check(self) -> Dict[str, Any]:
