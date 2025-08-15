@@ -5,6 +5,7 @@ import axios from 'axios';
 import './PredictionsView.css';
 
 interface Prediction {
+  id: number;
   fixture_id: number;
   date: string;
   status?: string;
@@ -24,7 +25,7 @@ interface Prediction {
     logo: string;
   };
   scores?: any;
-  predictions: {
+  predictions?: {
     match_winner: {
       home_win: number;
       draw: number;
@@ -250,7 +251,7 @@ const PredictionsView: React.FC = () => {
             const hasScores = prediction.scores && prediction.scores.localteam_score !== undefined;
             
             return (
-              <Col key={prediction.id || prediction.fixture_id} xl={6} className="mb-4">
+              <Col key={prediction.id} xl={6} className="mb-4">
                 <Card className="prediction-card h-100 shadow-sm">
                   <Card.Header className="prediction-header">
                     <div className="d-flex justify-content-between align-items-center">
