@@ -9,6 +9,8 @@ from api_routes import api_bp
 from exceptions import FootballAPIError, ValidationError, APIKeyError
 from security import add_security_headers
 from logging_config import setup_logging, get_logger
+import redis
+from config import Config
 
 # Initialize logging
 setup_logging()
@@ -27,10 +29,11 @@ def create_app(config_name=None):
     # Configure CORS with explicit settings
     CORS(app, 
          origins=app.config['CORS_ORIGINS'],
-         allow_headers=['Content-Type', 'Authorization', 'Access-Control-Allow-Origin', 'X-API-Key'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+         allow_headers=['Content-Type', 'Authorization', 'Access-Control-Allow-Origin', 'X-API-Key', 'Accept'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
          supports_credentials=True,
          expose_headers=['Content-Type', 'Authorization'],
+         send_wildcard=False,
          max_age=3600)  # Cache preflight requests for 1 hour
     
     # Log CORS configuration for debugging
@@ -241,6 +244,60 @@ def create_app(config_name=None):
                 }
             }
         }
+    
+    @app.route('/api/health', methods=['GET'])
+    def health_check():
+        """Health check endpoint to verify all services are configured and running"""
+        health_status = {
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'services': {}
+        }
+        
+        # Check database connection
+        try:
+            db.session.execute('SELECT 1')
+            health_status['services']['database'] = {
+                'status': 'connected',
+                'type': 'PostgreSQL' if 'postgresql' in app.config.get('SQLALCHEMY_DATABASE_URI', '') else 'SQLite'
+            }
+        except Exception as e:
+            health_status['services']['database'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+            health_status['status'] = 'unhealthy'
+        
+        # Check Redis connection
+        try:
+            redis_client = redis.from_url(Config.REDIS_URL)
+            redis_client.ping()
+            health_status['services']['redis'] = {'status': 'connected'}
+        except Exception as e:
+            health_status['services']['redis'] = {
+                'status': 'error',
+                'error': 'Redis not available'
+            }
+        
+        # Check SportMonks API configuration
+        sportmonks_configured = bool(
+            os.environ.get('SPORTMONKS_API_KEY') or 
+            os.environ.get('SPORTMONKS_PRIMARY_TOKEN')
+        )
+        health_status['services']['sportmonks'] = {
+            'status': 'configured' if sportmonks_configured else 'not_configured',
+            'has_primary_token': bool(os.environ.get('SPORTMONKS_PRIMARY_TOKEN')),
+            'has_fallback_tokens': bool(os.environ.get('SPORTMONKS_FALLBACK_TOKENS'))
+        }
+        
+        # Check CORS configuration
+        health_status['services']['cors'] = {
+            'status': 'configured',
+            'allowed_origins': app.config.get('CORS_ORIGINS', []),
+            'frontend_configured': 'https://football-prediction-frontend-zx5z.onrender.com' in app.config.get('CORS_ORIGINS', [])
+        }
+        
+        return jsonify(health_status), 200 if health_status['status'] == 'healthy' else 503
     
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')
