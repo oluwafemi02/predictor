@@ -28,23 +28,54 @@ interface Prediction {
   };
   scores?: any;
   predictions?: {
-    match_winner: {
+    match_winner?: {
       home_win: number;
       draw: number;
       away_win: number;
     };
-    goals: {
+    goals?: {
+      over_15: number;
+      under_15: number;
       over_25: number;
       under_25: number;
-      btts_yes: number;
-      btts_no: number;
+      over_35: number;
+      under_35: number;
+      over_45?: number;
+      under_45?: number;
+      btts_yes?: number;
+      btts_no?: number;
+    };
+    btts?: {
+      yes: number;
+      no: number;
     };
     correct_scores?: Array<{
       score: string;
       probability: number;
     }>;
+    double_chance?: {
+      home_or_draw: number;
+      away_or_draw: number;
+      home_or_away: number;
+    };
+    first_half?: {
+      home: number;
+      draw: number;
+      away: number;
+    };
+    corners?: {
+      [key: string]: number;
+    };
+    team_goals?: {
+      home: {
+        [key: string]: number;
+      };
+      away: {
+        [key: string]: number;
+      };
+    };
   };
-  prediction_confidence?: number;
+  prediction_confidence?: string;
 }
 
 interface AllFixtures {
