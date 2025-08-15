@@ -65,7 +65,7 @@ const PredictionsView: React.FC = () => {
       const params = new URLSearchParams({
         days_back: selectedDays.toString(),
         days_ahead: selectedDays.toString(),
-        predictions: 'true',
+        predictions: 'false',  // Changed to false to get fixtures first
       });
       
       if (selectedLeague) {
@@ -324,7 +324,9 @@ const PredictionsView: React.FC = () => {
                           </Badge>
                         </div>
                       ) : (
-                        <div className="text-center text-muted">No prediction available.</div>
+                        <div className="text-center text-muted">
+                          <p>Match predictions will be available soon</p>
+                        </div>
                       )}
                       <div className="probabilities">
                         {winner && prediction.predictions?.match_winner && (
@@ -358,12 +360,12 @@ const PredictionsView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="prediction-section">
-                      <h6 className="section-title">
-                        <TrendingUp size={16} className="me-1" />
-                        Goals Predictions
-                      </h6>
-                      {prediction.predictions?.goals ? (
+                    {prediction.predictions?.goals && (
+                      <div className="prediction-section">
+                        <h6 className="section-title">
+                          <TrendingUp size={16} className="me-1" />
+                          Goals Predictions
+                        </h6>
                         <Row>
                           <Col xs={6}>
                             <div className="goal-prediction">
@@ -398,10 +400,8 @@ const PredictionsView: React.FC = () => {
                             </div>
                           </Col>
                         </Row>
-                      ) : (
-                        <div className="text-center text-muted">No prediction available.</div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </Card.Body>
 
                   <Card.Footer className="prediction-footer">
