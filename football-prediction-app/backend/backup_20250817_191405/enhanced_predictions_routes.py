@@ -5,7 +5,7 @@ Provides AI-powered predictions with multi-source data aggregation
 
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
-from unified_prediction_engine import UnifiedPredictionEngine
+from enhanced_prediction_engine import EnhancedPredictionEngine
 from sportmonks_client import SportMonksAPIClient
 import logging
 from flask_cors import cross_origin
@@ -22,7 +22,7 @@ enhanced_predictions_bp = Blueprint('enhanced_predictions', __name__, url_prefix
 
 # Initialize clients
 sportmonks_client = SportMonksAPIClient()
-prediction_engine = UnifiedPredictionEngine(sportmonks_client)
+prediction_engine = EnhancedPredictionEngine(sportmonks_client)
 
 # Cache decorator
 def cache_response(timeout=300):
@@ -115,7 +115,7 @@ def get_enhanced_prediction(fixture_id):
         logger.info(f"Generating enhanced prediction for fixture {fixture_id}")
         
         # Generate prediction using the engine
-        prediction = prediction_engine.predict_match(fixture_id)
+        prediction = prediction_engine.generate_prediction(fixture_id)
         
         if not prediction:
             return jsonify({
@@ -197,7 +197,7 @@ def get_batch_enhanced_predictions():
         
         for fixture_id in fixture_ids:
             try:
-                prediction = prediction_engine.predict_match(fixture_id)
+                prediction = prediction_engine.generate_prediction(fixture_id)
                 if prediction:
                     predictions.append({
                         'fixture_id': prediction.fixture_id,
@@ -285,7 +285,7 @@ def get_upcoming_enhanced_predictions():
                 if fixture.get('state_id') in [5, 31, 32]:  # Finished states
                     continue
                 
-                prediction = prediction_engine.predict_match(fixture['id'])
+                prediction = prediction_engine.generate_prediction(fixture['id'])
                 
                 if prediction and prediction.confidence_score >= min_confidence:
                     # Extract participants

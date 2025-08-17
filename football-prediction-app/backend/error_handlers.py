@@ -1,291 +1,246 @@
 """
-Centralized error handling module for consistent error management
+Enhanced Error Handlers for Football Prediction App
+Provides user-friendly error messages and proper logging
 """
 
 import logging
-import functools
-import traceback
-from typing import Callable, Dict, Any, Optional, Tuple
 from flask import jsonify, request
-from datetime import datetime
-from exceptions import (
-    FootballAPIError, 
-    ValidationError, 
-    APIKeyError, 
-    DataNotFoundError,
-    ExternalAPIError
-)
-from models import db
+from werkzeug.exceptions import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
+from exceptions import FootballAPIError, ValidationError, APIKeyError
+import traceback
 
 logger = logging.getLogger(__name__)
 
 
-class ErrorResponse:
-    """Standardized error response structure"""
+def register_error_handlers(app):
+    """Register all error handlers with the Flask app"""
     
-    @staticmethod
-    def create(
-        error: str,
-        message: str,
-        status_code: int = 500,
-        details: Optional[Dict[str, Any]] = None,
-        request_id: Optional[str] = None
-    ) -> Tuple[Dict[str, Any], int]:
-        """Create a standardized error response"""
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(error):
+        """Handle validation errors with friendly messages"""
+        logger.warning(f"Validation error: {str(error)} - Request: {request.url}")
+        
         response = {
-            'status': 'error',
-            'error': error,
-            'message': message,
-            'timestamp': datetime.utcnow().isoformat(),
-            'path': request.path if request else None,
-            'method': request.method if request else None
+            'error': 'Validation Error',
+            'message': str(error),
+            'details': 'Please check your input and try again.',
+            'status_code': 400
         }
         
-        if details:
-            response['details'] = details
-            
-        if request_id:
-            response['request_id'] = request_id
-            
-        return response, status_code
-
-
-def handle_api_errors(func: Callable) -> Callable:
-    """
-    Decorator for handling API errors consistently
-    Wraps function calls and converts exceptions to proper API responses
-    """
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        request_id = request.headers.get('X-Request-ID', None)
+        # Add field-specific errors if available
+        if hasattr(error, 'field'):
+            response['field'] = error.field
+            response['hint'] = get_validation_hint(error.field)
         
-        try:
-            return func(*args, **kwargs)
-            
-        except ValidationError as e:
-            logger.warning(f"Validation error in {func.__name__}: {e.message}")
-            return ErrorResponse.create(
-                error='validation_error',
-                message=e.message,
-                status_code=e.status_code,
-                details={'field': e.field} if e.field else None,
-                request_id=request_id
-            )
-            
-        except APIKeyError as e:
-            logger.error(f"API key error in {func.__name__}: {e.message}")
-            return ErrorResponse.create(
-                error='authentication_error',
-                message=e.message,
-                status_code=e.status_code,
-                request_id=request_id
-            )
-            
-        except DataNotFoundError as e:
-            logger.info(f"Data not found in {func.__name__}: {e.message}")
-            return ErrorResponse.create(
-                error='not_found',
-                message=e.message,
-                status_code=e.status_code,
-                details={'resource': e.resource} if e.resource else None,
-                request_id=request_id
-            )
-            
-        except ExternalAPIError as e:
-            logger.error(f"External API error in {func.__name__}: {e.message}")
-            return ErrorResponse.create(
-                error='external_service_error',
-                message=e.message,
-                status_code=e.status_code,
-                details={'service': e.service} if e.service else None,
-                request_id=request_id
-            )
-            
-        except FootballAPIError as e:
-            logger.error(f"Football API error in {func.__name__}: {e.message}")
-            return ErrorResponse.create(
-                error='api_error',
-                message=e.message,
-                status_code=e.status_code,
-                details=e.payload,
-                request_id=request_id
-            )
-            
-        except Exception as e:
-            # Log full traceback for unexpected errors
-            logger.error(
-                f"Unexpected error in {func.__name__}: {str(e)}\n"
-                f"Traceback:\n{traceback.format_exc()}"
-            )
-            
-            # Rollback any pending database transactions
-            try:
-                db.session.rollback()
-            except:
-                pass
-            
-            # Return generic error in production, detailed in development
-            if request and request.app.config.get('DEBUG'):
-                return ErrorResponse.create(
-                    error='internal_error',
-                    message=str(e),
-                    status_code=500,
-                    details={'traceback': traceback.format_exc()},
-                    request_id=request_id
-                )
-            else:
-                return ErrorResponse.create(
-                    error='internal_error',
-                    message='An unexpected error occurred. Please try again later.',
-                    status_code=500,
-                    request_id=request_id
-                )
-                
-    return wrapper
-
-
-def validate_request_data(schema: Dict[str, Any]) -> Callable:
-    """
-    Decorator for validating request data against a schema
+        return jsonify(response), 400
     
-    Args:
-        schema: Dictionary defining expected fields and their types
+    @app.errorhandler(APIKeyError)
+    def handle_api_key_error(error):
+        """Handle API key errors"""
+        logger.warning(f"API key error: {str(error)} - IP: {request.remote_addr}")
         
-    Example:
-        @validate_request_data({
-            'team_id': {'type': int, 'required': True},
-            'season': {'type': str, 'required': False, 'default': '2023'}
-        })
-        def create_team_stats():
-            ...
-    """
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            data = request.get_json() if request.is_json else {}
-            
-            # Validate each field in schema
-            for field, rules in schema.items():
-                field_type = rules.get('type', str)
-                required = rules.get('required', False)
-                default = rules.get('default', None)
-                
-                value = data.get(field)
-                
-                # Check required fields
-                if required and value is None:
-                    raise ValidationError(f"Field '{field}' is required", field=field)
-                
-                # Set default if not provided
-                if value is None and default is not None:
-                    data[field] = default
-                    continue
-                
-                # Type validation
-                if value is not None:
-                    try:
-                        if field_type == int:
-                            data[field] = int(value)
-                        elif field_type == float:
-                            data[field] = float(value)
-                        elif field_type == bool:
-                            data[field] = bool(value)
-                        elif field_type == str:
-                            data[field] = str(value)
-                    except (ValueError, TypeError):
-                        raise ValidationError(
-                            f"Field '{field}' must be of type {field_type.__name__}",
-                            field=field
-                        )
-            
-            # Store validated data for use in the function
-            request.validated_data = data
-            return func(*args, **kwargs)
-            
-        return wrapper
-    return decorator
-
-
-def rate_limit_handler(error):
-    """Handle rate limit errors"""
-    return ErrorResponse.create(
-        error='rate_limit_exceeded',
-        message='Too many requests. Please try again later.',
-        status_code=429,
-        details={
-            'retry_after': error.description if hasattr(error, 'description') else 60
-        }
-    )
-
-
-def handle_database_errors(func: Callable) -> Callable:
-    """
-    Decorator specifically for database operations
-    Ensures proper rollback on errors
-    """
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Database error in {func.__name__}: {str(e)}")
-            
-            # Check for common database errors
-            error_str = str(e).lower()
-            
-            if 'duplicate key' in error_str or 'unique constraint' in error_str:
-                return ErrorResponse.create(
-                    error='duplicate_entry',
-                    message='A record with this information already exists',
-                    status_code=409
-                )
-            elif 'foreign key' in error_str:
-                return ErrorResponse.create(
-                    error='invalid_reference',
-                    message='Referenced record does not exist',
-                    status_code=400
-                )
-            elif 'not null' in error_str:
-                return ErrorResponse.create(
-                    error='missing_required_field',
-                    message='A required field is missing',
-                    status_code=400
-                )
-            else:
-                # Re-raise to be handled by general error handler
-                raise
-                
-    return wrapper
-
-
-def log_performance(func: Callable) -> Callable:
-    """
-    Decorator to log function performance
-    Useful for identifying slow operations
-    """
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        import time
-        start_time = time.time()
+        return jsonify({
+            'error': 'Authentication Error',
+            'message': 'Invalid or missing API key.',
+            'details': 'Please provide a valid API key in the X-API-Key header.',
+            'status_code': 401
+        }), 401
+    
+    @app.errorhandler(FootballAPIError)
+    def handle_football_api_error(error):
+        """Handle external Football API errors"""
+        logger.error(f"Football API error: {str(error)}")
         
-        try:
-            result = func(*args, **kwargs)
-            execution_time = time.time() - start_time
-            
-            # Log slow operations
-            if execution_time > 1.0:  # Log if takes more than 1 second
-                logger.warning(
-                    f"Slow operation: {func.__name__} took {execution_time:.2f}s"
-                )
-            
-            return result
-            
-        except Exception as e:
-            execution_time = time.time() - start_time
-            logger.error(
-                f"Error in {func.__name__} after {execution_time:.2f}s: {str(e)}"
-            )
-            raise
-            
-    return wrapper
+        # Provide user-friendly messages based on error type
+        if 'rate limit' in str(error).lower():
+            message = "We're receiving too many requests. Please try again in a few minutes."
+            details = "Our data provider has rate limits to ensure service quality."
+        elif 'not found' in str(error).lower():
+            message = "The requested data could not be found."
+            details = "This match or team data may not be available yet."
+        else:
+            message = "We're having trouble fetching the latest data."
+            details = "Please try again later or contact support if the issue persists."
+        
+        return jsonify({
+            'error': 'Data Provider Error',
+            'message': message,
+            'details': details,
+            'status_code': error.status_code if hasattr(error, 'status_code') else 503
+        }), error.status_code if hasattr(error, 'status_code') else 503
+    
+    @app.errorhandler(SQLAlchemyError)
+    def handle_database_error(error):
+        """Handle database errors"""
+        logger.error(f"Database error: {str(error)}", exc_info=True)
+        
+        # Don't expose internal database details
+        return jsonify({
+            'error': 'Database Error',
+            'message': 'We encountered a problem accessing our database.',
+            'details': 'Our team has been notified. Please try again later.',
+            'status_code': 500
+        }), 500
+    
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        """Handle 404 errors with helpful messages"""
+        logger.info(f"404 error: {request.url}")
+        
+        # Provide helpful suggestions based on the URL
+        path = request.path
+        suggestions = []
+        
+        if '/api/teams' in path:
+            suggestions.append("Try /api/teams to list all teams")
+            suggestions.append("Use /api/teams?search=name to search teams")
+        elif '/api/matches' in path:
+            suggestions.append("Try /api/matches/upcoming for upcoming matches")
+            suggestions.append("Use /api/matches?date=YYYY-MM-DD for specific date")
+        elif '/api/predictions' in path:
+            suggestions.append("Try /api/predictions/main for main predictions")
+            suggestions.append("POST to /api/predictions/{match_id} to create prediction")
+        
+        return jsonify({
+            'error': 'Not Found',
+            'message': f"The requested URL {path} was not found.",
+            'details': 'Please check the URL and try again.',
+            'suggestions': suggestions,
+            'status_code': 404
+        }), 404
+    
+    @app.errorhandler(405)
+    def handle_method_not_allowed(error):
+        """Handle 405 method not allowed errors"""
+        logger.info(f"405 error: {request.method} {request.url}")
+        
+        return jsonify({
+            'error': 'Method Not Allowed',
+            'message': f"The {request.method} method is not allowed for this endpoint.",
+            'details': f"Allowed methods: {', '.join(error.valid_methods) if hasattr(error, 'valid_methods') else 'See API documentation'}",
+            'status_code': 405
+        }), 405
+    
+    @app.errorhandler(429)
+    def handle_rate_limit(error):
+        """Handle rate limiting errors"""
+        logger.warning(f"Rate limit exceeded: {request.remote_addr}")
+        
+        return jsonify({
+            'error': 'Rate Limit Exceeded',
+            'message': 'You have made too many requests.',
+            'details': 'Please wait a moment before making more requests.',
+            'retry_after': error.retry_after if hasattr(error, 'retry_after') else 60,
+            'status_code': 429
+        }), 429
+    
+    @app.errorhandler(500)
+    def handle_internal_error(error):
+        """Handle internal server errors"""
+        logger.error(f"Internal server error: {str(error)}", exc_info=True)
+        
+        # Log the full traceback for debugging
+        logger.error(traceback.format_exc())
+        
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': 'Oops! Something went wrong on our end.',
+            'details': 'Our team has been notified and is working on it.',
+            'reference': request.headers.get('X-Request-ID', 'N/A'),
+            'status_code': 500
+        }), 500
+    
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error):
+        """Catch-all handler for unexpected errors"""
+        logger.error(f"Unexpected error: {type(error).__name__}: {str(error)}", exc_info=True)
+        
+        # Handle HTTPException
+        if isinstance(error, HTTPException):
+            return jsonify({
+                'error': error.name,
+                'message': error.description,
+                'status_code': error.code
+            }), error.code
+        
+        # Generic error response
+        return jsonify({
+            'error': 'Unexpected Error',
+            'message': 'An unexpected error occurred.',
+            'details': 'Please try again or contact support if the issue persists.',
+            'status_code': 500
+        }), 500
+    
+    @app.before_request
+    def log_request_info():
+        """Log incoming request information"""
+        logger.debug(f"Request: {request.method} {request.url} - IP: {request.remote_addr}")
+    
+    @app.after_request
+    def log_response_info(response):
+        """Log response information"""
+        logger.debug(f"Response: {response.status_code} - Size: {response.content_length or 0}")
+        return response
+
+
+def get_validation_hint(field):
+    """Get helpful hints for validation errors"""
+    hints = {
+        'date': 'Date should be in YYYY-MM-DD format',
+        'team_id': 'Team ID should be a positive integer',
+        'match_id': 'Match ID should be a positive integer',
+        'page': 'Page number should be a positive integer',
+        'per_page': 'Items per page should be between 1 and 100',
+        'search': 'Search term should be at least 2 characters long',
+        'season': 'Season should be in YYYY/YYYY format (e.g., 2023/2024)',
+        'league_id': 'League ID should be a positive integer',
+        'confidence': 'Confidence should be between 0 and 100'
+    }
+    
+    return hints.get(field, 'Please check the format of your input')
+
+
+def create_error_response(error_type, message, details=None, status_code=400, **kwargs):
+    """Create a standardized error response"""
+    response = {
+        'error': error_type,
+        'message': message,
+        'status_code': status_code
+    }
+    
+    if details:
+        response['details'] = details
+    
+    # Add any additional fields
+    response.update(kwargs)
+    
+    return jsonify(response), status_code
+
+
+# Custom exception classes for better error handling
+class PredictionError(Exception):
+    """Raised when prediction generation fails"""
+    def __init__(self, message="Failed to generate prediction", details=None):
+        self.message = message
+        self.details = details
+        super().__init__(self.message)
+
+
+class DataNotFoundError(Exception):
+    """Raised when required data is not found"""
+    def __init__(self, resource, identifier=None):
+        self.resource = resource
+        self.identifier = identifier
+        message = f"{resource} not found"
+        if identifier:
+            message += f": {identifier}"
+        super().__init__(message)
+
+
+class ExternalAPIError(Exception):
+    """Raised when external API calls fail"""
+    def __init__(self, api_name, message, status_code=None):
+        self.api_name = api_name
+        self.status_code = status_code
+        super().__init__(f"{api_name} API error: {message}")

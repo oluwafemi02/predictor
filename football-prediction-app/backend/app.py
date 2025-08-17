@@ -9,6 +9,7 @@ from api_routes import api_bp
 from exceptions import FootballAPIError, ValidationError, APIKeyError
 from security import add_security_headers
 from logging_config import setup_logging, get_logger
+from error_handlers import register_error_handlers
 import redis
 from config import Config
 
@@ -237,13 +238,24 @@ def create_app(config_name=None):
     
     # Set up monitoring
     try:
-        from monitoring import setup_monitoring
+        # Try enhanced monitoring first
+        from enhanced_monitoring import setup_monitoring
         monitor = setup_monitoring(app)
-        print("Monitoring initialized successfully")
-    except ImportError as e:
-        print(f"Warning: Monitoring not available: {str(e)}")
+        print("Enhanced monitoring initialized successfully")
+    except ImportError:
+        # Fall back to basic monitoring
+        try:
+            from monitoring import setup_monitoring
+            monitor = setup_monitoring(app)
+            print("Basic monitoring initialized successfully")
+        except ImportError as e:
+            print(f"Warning: Monitoring not available: {str(e)}")
     except Exception as e:
         print(f"Error initializing monitoring: {str(e)}")
+    
+    # Register enhanced error handlers
+    register_error_handlers(app)
+    logger.info("Enhanced error handlers registered successfully")
     
     # CORS test endpoint
     @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
