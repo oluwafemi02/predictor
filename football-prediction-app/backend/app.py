@@ -46,11 +46,24 @@ def create_app(config_name=None):
         """Ensure CORS headers are always present"""
         origin = request.headers.get('Origin')
         
-        # Check if origin is allowed
-        if origin and origin in app.config['CORS_ORIGINS']:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        # Check if origin is allowed (with wildcard support)
+        if origin:
+            allowed = False
+            for allowed_origin in app.config['CORS_ORIGINS']:
+                if allowed_origin == origin:
+                    allowed = True
+                    break
+                elif allowed_origin.startswith('https://*.') and origin.startswith('https://'):
+                    # Handle wildcard subdomains
+                    domain = allowed_origin[9:]  # Remove 'https://*.'
+                    if origin.endswith(domain):
+                        allowed = True
+                        break
             
+            if allowed:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+        
             # For preflight requests
             if request.method == 'OPTIONS':
                 response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
@@ -68,15 +81,28 @@ def create_app(config_name=None):
             # Log the incoming origin for debugging
             logger.info(f"OPTIONS request from origin: {origin}")
             
-            if origin and origin in app.config['CORS_ORIGINS']:
-                response.headers['Access-Control-Allow-Origin'] = origin
-                response.headers['Access-Control-Allow-Headers'] = "Content-Type,Authorization,X-API-Key,Accept"
-                response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
-                response.headers['Access-Control-Allow-Credentials'] = 'true'
-                response.headers['Access-Control-Max-Age'] = '3600'
-                logger.info(f"CORS headers set for origin: {origin}")
-            else:
-                logger.warning(f"Origin {origin} not in allowed origins: {app.config['CORS_ORIGINS']}")
+            if origin:
+                allowed = False
+                for allowed_origin in app.config['CORS_ORIGINS']:
+                    if allowed_origin == origin:
+                        allowed = True
+                        break
+                    elif allowed_origin.startswith('https://*.') and origin.startswith('https://'):
+                        # Handle wildcard subdomains
+                        domain = allowed_origin[9:]  # Remove 'https://*.'
+                        if origin.endswith(domain):
+                            allowed = True
+                            break
+                
+                if allowed:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                    response.headers['Access-Control-Allow-Headers'] = "Content-Type,Authorization,X-API-Key,Accept"
+                    response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+                    response.headers['Access-Control-Max-Age'] = '3600'
+                    logger.info(f"CORS headers set for origin: {origin}")
+                else:
+                    logger.warning(f"Origin {origin} not in allowed origins: {app.config['CORS_ORIGINS']}")
             return response
     
     # Initialize JWT authentication
@@ -363,6 +389,40 @@ def create_app(config_name=None):
         }
         
         return jsonify(health_status), 200 if health_status['status'] == 'healthy' else 503
+    
+    @app.route('/healthz', methods=['GET'])
+    def healthz():
+        """Simple health check endpoint for Render"""
+        return jsonify({"status": "ok"}), 200
+    
+    @app.route('/api/version', methods=['GET'])
+    def version():
+        """Get application version and deployment info"""
+        import subprocess
+        
+        # Try to get git commit hash
+        try:
+            git_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()[:7]
+        except:
+            git_hash = 'unknown'
+        
+        # Get deployment timestamp
+        deployment_time = os.environ.get('RENDER_DEPLOY_TIMESTAMP', datetime.utcnow().isoformat())
+        
+        return jsonify({
+            'version': '1.0.0',
+            'git_commit': git_hash,
+            'deployment_time': deployment_time,
+            'environment': app.config.get('ENV', 'development'),
+            'python_version': os.sys.version.split()[0],
+            'features': {
+                'sportmonks': bool(os.environ.get('SPORTMONKS_API_KEY')),
+                'rapidapi': bool(os.environ.get('RAPIDAPI_KEY')),
+                'redis': bool(app.config.get('REDIS_URL')),
+                'celery': bool(app.config.get('CELERY_BROKER_URL')),
+                'scheduler': app.config.get('ENABLE_SCHEDULER', False)
+            }
+        }), 200
     
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')

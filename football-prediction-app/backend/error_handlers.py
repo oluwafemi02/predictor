@@ -244,3 +244,45 @@ class ExternalAPIError(Exception):
         self.api_name = api_name
         self.status_code = status_code
         super().__init__(f"{api_name} API error: {message}")
+
+
+# Add missing functions for compatibility with api_routes.py
+def handle_api_errors(fn):
+    """Decorator to handle API errors in route functions"""
+    from functools import wraps
+    
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ValidationError as e:
+            return create_error_response('Validation Error', str(e), status_code=400)
+        except APIKeyError as e:
+            return create_error_response('Authentication Error', str(e), status_code=401)
+        except FootballAPIError as e:
+            return create_error_response('API Error', str(e), status_code=e.status_code if hasattr(e, 'status_code') else 503)
+        except DataNotFoundError as e:
+            return create_error_response('Not Found', str(e), status_code=404)
+        except Exception as e:
+            logger.error(f"Unexpected error in {fn.__name__}: {str(e)}", exc_info=True)
+            return create_error_response('Internal Server Error', 'An unexpected error occurred', status_code=500)
+    
+    return wrapper
+
+
+def log_performance(fn):
+    """Decorator to log performance metrics for route functions"""
+    from functools import wraps
+    import time
+    
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        try:
+            result = fn(*args, **kwargs)
+            return result
+        finally:
+            duration = (time.perf_counter() - start_time) * 1000  # Convert to milliseconds
+            logger.info(f"[PERF] {request.method} {request.path} - {duration:.2f}ms")
+    
+    return wrapper

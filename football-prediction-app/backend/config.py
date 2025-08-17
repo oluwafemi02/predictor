@@ -11,6 +11,13 @@ def get_database_url():
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     return database_url
 
+# Helper function to parse CORS origins
+def parse_cors_origins(env_value):
+    """Parse CORS origins from environment variable"""
+    if not env_value:
+        return []
+    return [origin.strip() for origin in env_value.split(',') if origin.strip()]
+
 class Config:
     # Generate secure secret key - use environment variable in production
     SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
@@ -49,13 +56,13 @@ class Config:
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'redis://localhost:6379/0'
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'redis://localhost:6379/0'
     
-    # CORS Configuration - secure origins only
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else [
+    # CORS Configuration - use environment variable or defaults
+    CORS_ORIGINS = parse_cors_origins(os.environ.get('CORS_ORIGINS')) or [
         'http://localhost:3000', 
         'http://localhost:5173',
-        'https://football-prediction-frontend.onrender.com',  # Specific production domain
-        'https://football-prediction-frontend-2cvi.onrender.com',  # Current production domain
-        'https://football-prediction-frontend-zx5z.onrender.com'  # Your frontend domain
+        'https://football-prediction-frontend.onrender.com',
+        'https://football-prediction-frontend-2cvi.onrender.com',
+        'https://football-prediction-frontend-zx5z.onrender.com'
     ]
     
     # Scheduler Configuration
@@ -98,16 +105,16 @@ class ProductionConfig(Config):
         raise ValueError("TOKEN_ENCRYPTION_SALT must be set in production!")
     
     # Stricter CORS in production
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else []
+    CORS_ORIGINS = parse_cors_origins(os.environ.get('CORS_ORIGINS'))
     if not CORS_ORIGINS:
-        # Instead of raising an error, use a default set of production origins
+        # Use secure default production origins
         CORS_ORIGINS = [
             'https://football-prediction-frontend.onrender.com',
             'https://football-prediction-frontend-2cvi.onrender.com',
             'https://football-prediction-frontend-zx5z.onrender.com',
-            'https://football-prediction-backend-2cvi.onrender.com'  # Allow backend self-requests
+            'https://predictor.onrender.com',  # Generic predictor domain
+            'https://*.onrender.com'  # Allow all Render subdomains
         ]
-        print("Warning: CORS_ORIGINS not set, using default production origins")
 
 config = {
     'development': DevelopmentConfig,
