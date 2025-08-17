@@ -395,6 +395,35 @@ def create_app(config_name=None):
         """Simple health check endpoint for Render"""
         return jsonify({"status": "ok"}), 200
     
+    @app.route('/api/version', methods=['GET'])
+    def version():
+        """Get application version and deployment info"""
+        import subprocess
+        
+        # Try to get git commit hash
+        try:
+            git_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()[:7]
+        except:
+            git_hash = 'unknown'
+        
+        # Get deployment timestamp
+        deployment_time = os.environ.get('RENDER_DEPLOY_TIMESTAMP', datetime.utcnow().isoformat())
+        
+        return jsonify({
+            'version': '1.0.0',
+            'git_commit': git_hash,
+            'deployment_time': deployment_time,
+            'environment': app.config.get('ENV', 'development'),
+            'python_version': os.sys.version.split()[0],
+            'features': {
+                'sportmonks': bool(os.environ.get('SPORTMONKS_API_KEY')),
+                'rapidapi': bool(os.environ.get('RAPIDAPI_KEY')),
+                'redis': bool(app.config.get('REDIS_URL')),
+                'celery': bool(app.config.get('CELERY_BROKER_URL')),
+                'scheduler': app.config.get('ENABLE_SCHEDULER', False)
+            }
+        }), 200
+    
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')
     def serve_react_app(path):
