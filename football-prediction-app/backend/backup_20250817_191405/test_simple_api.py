@@ -107,12 +107,12 @@ def test_prediction_engine():
     print("\n\n🎯 Testing Prediction Engine...")
     
     try:
-        from unified_prediction_engine import UnifiedPredictionEngine
+        from simple_prediction_engine import SimplePredictionEngine
         from sportmonks_api_v3 import SportMonksV3Client
         
         # Initialize
         client = SportMonksV3Client()
-        engine = UnifiedPredictionEngine()
+        engine = SimplePredictionEngine()
         print("✅ Prediction engine initialized")
         
         # Get an upcoming fixture to analyze

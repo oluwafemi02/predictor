@@ -5,7 +5,7 @@ from flask_cors import cross_origin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 from sportmonks_client import SportMonksAPIClient
-from unified_prediction_engine import UnifiedPredictionEngine
+from enhanced_prediction_engine import EnhancedPredictionEngine
 import hashlib
 import redis
 import os
@@ -17,7 +17,7 @@ enhanced_predictions_bp = Blueprint('enhanced_predictions', __name__, url_prefix
 
 # Initialize SportMonks client and prediction engine
 sportmonks_client = SportMonksAPIClient()
-prediction_engine = UnifiedPredictionEngine(sportmonks_client)
+prediction_engine = EnhancedPredictionEngine(sportmonks_client)
 
 # Redis client for caching
 try:

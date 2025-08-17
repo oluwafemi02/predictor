@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 from sportmonks_api_v3 import SportMonksV3Client
-from unified_prediction_engine import UnifiedPredictionEngine
+from simple_prediction_engine import SimplePredictionEngine
 import logging
 import os
 
@@ -13,7 +13,7 @@ simple_bp = Blueprint('simple', __name__, url_prefix='/api/v2')
 # Initialize clients
 try:
     client = SportMonksV3Client()
-    prediction_engine = UnifiedPredictionEngine()
+    prediction_engine = SimplePredictionEngine()
     api_available = True
 except Exception as e:
     logger.error(f"Failed to initialize SportMonks client: {str(e)}")

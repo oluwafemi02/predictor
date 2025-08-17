@@ -5,7 +5,7 @@ Comprehensive AI-powered predictions for the main page with multi-source data ag
 
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
-from unified_prediction_engine import UnifiedPredictionEngine
+from main_page_prediction_engine import MainPagePredictionEngine
 from sportmonks_client import SportMonksAPIClient
 import logging
 from flask_cors import cross_origin
@@ -23,7 +23,7 @@ main_predictions_bp = Blueprint('main_predictions', __name__, url_prefix='/api/v
 
 # Initialize clients
 sportmonks_client = SportMonksAPIClient()
-prediction_engine = UnifiedPredictionEngine(sportmonks_client)
+prediction_engine = MainPagePredictionEngine(sportmonks_client)
 
 # Cache decorator with Redis support
 def cache_response(timeout=300):

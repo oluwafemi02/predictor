@@ -5,7 +5,7 @@ Provides AI-powered predictions with multi-source data aggregation for the main 
 
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
-from unified_prediction_engine import UnifiedPredictionEngine
+from prediction_engine import AdvancedPredictionEngine
 from sportmonks_client import SportMonksAPIClient
 import logging
 from flask_cors import cross_origin
@@ -23,7 +23,7 @@ advanced_predictions_bp = Blueprint('advanced_predictions', __name__, url_prefix
 
 # Initialize clients
 sportmonks_client = SportMonksAPIClient()
-prediction_engine = UnifiedPredictionEngine(sportmonks_client)
+prediction_engine = AdvancedPredictionEngine(sportmonks_client)
 
 # Cache decorator
 def cache_response(timeout=300):
@@ -252,7 +252,7 @@ def get_single_fixture_prediction(fixture_id):
     - Historical context
     """
     try:
-        prediction = prediction_engine.predict_match(fixture_id)
+        prediction = prediction_engine.generate_prediction(fixture_id)
         
         if not prediction:
             return jsonify({
