@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Badge, ProgressBar, Spinner, Alert, Button, Nav, Tab } from 'react-bootstrap';
 import { FaTrophy, FaChartLine, FaExclamationTriangle, FaInfoCircle, FaClock, FaStar } from 'react-icons/fa';
-import axios from 'axios';
+import axios from '../services/api';
 import './MainPagePredictions.css';
 
 interface Prediction {

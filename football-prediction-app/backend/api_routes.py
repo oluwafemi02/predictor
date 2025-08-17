@@ -1037,6 +1037,86 @@ def get_league_table():
             'table': []
         })
 
+@api_bp.route('/predictions/today', methods=['GET'])
+def get_todays_predictions():
+    """Get today's match predictions"""
+    try:
+        limit = request.args.get('limit', 15, type=int)
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Get today's matches
+        matches = Match.query.filter(
+            Match.match_date >= today,
+            Match.match_date < tomorrow,
+            (Match.status != 'finished') | (Match.home_score.is_(None))
+        ).order_by(Match.match_date.asc()).limit(limit).all()
+        
+        predictions = []
+        for match in matches:
+            # Get recent form
+            home_form = Match.query.filter(
+                (Match.home_team_id == match.home_team_id) | (Match.away_team_id == match.home_team_id),
+                Match.status == 'finished',
+                Match.home_score.isnot(None)
+            ).order_by(Match.match_date.desc()).limit(5).all()
+            
+            away_form = Match.query.filter(
+                (Match.home_team_id == match.away_team_id) | (Match.away_team_id == match.away_team_id),
+                Match.status == 'finished',
+                Match.home_score.isnot(None)
+            ).order_by(Match.match_date.desc()).limit(5).all()
+            
+            # Calculate simple prediction
+            home_wins = sum(1 for m in home_form if (
+                (m.home_team_id == match.home_team_id and m.home_score > m.away_score) or
+                (m.away_team_id == match.home_team_id and m.away_score > m.home_score)
+            ))
+            
+            away_wins = sum(1 for m in away_form if (
+                (m.home_team_id == match.away_team_id and m.home_score > m.away_score) or
+                (m.away_team_id == match.away_team_id and m.away_score > m.home_score)
+            ))
+            
+            total_games = max(len(home_form) + len(away_form), 1)
+            home_win_prob = (home_wins + 1) / (total_games + 3)  # Smoothing
+            away_win_prob = (away_wins + 1) / (total_games + 3)
+            draw_prob = 1 - home_win_prob - away_win_prob
+            
+            predictions.append({
+                'id': match.id,
+                'date': match.match_date.isoformat() if match.match_date else None,
+                'home_team': {
+                    'id': match.home_team_id,
+                    'name': match.home_team.name if match.home_team else 'Unknown'
+                },
+                'away_team': {
+                    'id': match.away_team_id,
+                    'name': match.away_team.name if match.away_team else 'Unknown'
+                },
+                'prediction': {
+                    'home_win': round(home_win_prob, 2),
+                    'draw': round(draw_prob, 2),
+                    'away_win': round(away_win_prob, 2),
+                    'confidence': 0.75
+                },
+                'competition': match.competition,
+                'status': match.status
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'data': predictions,
+            'count': len(predictions),
+            'date': today.isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Error getting today's predictions: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @api_bp.route('/predictions', methods=['GET'])
 def get_predictions():
     """Get predictions with filters"""

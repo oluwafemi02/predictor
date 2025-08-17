@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Badge, ProgressBar, Button, Form, Spinner, Alert, Nav } from 'react-bootstrap';
-import axios from 'axios';
+import axios from '../services/api';
 import './AdvancedPredictions.css';
 
 interface AdvancedPrediction {
@@ -94,8 +94,8 @@ const AdvancedPredictions: React.FC = () => {
       }
       
       const endpoint = viewMode === 'value-bets' 
-        ? `${process.env.REACT_APP_API_URL}/api/v1/predictions/advanced/value-bets`
-        : `${process.env.REACT_APP_API_URL}/api/v1/predictions/advanced`;
+        ? `/api/v1/predictions/advanced/value-bets`
+        : `/api/v1/predictions/advanced`;
       
       const response = await axios.get(endpoint, { params });
       

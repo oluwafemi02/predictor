@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Row, Col, Nav, Tab } from 'react-bootstrap';
 import { Calendar, Clock, MapPin, AlertCircle } from 'lucide-react';
-import axios from 'axios';
+import axios from '../services/api';
 import './FixturesList.css';
 
 interface Fixture {
@@ -53,10 +53,10 @@ const FixturesList: React.FC = () => {
     setError(null);
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/all?days_back=7&days_ahead=7&league_id=8`,
+        `/api/sportmonks/fixtures/all?days_back=7&days_ahead=7&league_id=8`,
         {
           headers: {
-            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
           }
         }
       );

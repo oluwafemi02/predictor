@@ -1,16 +1,46 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL 
-  ? `${process.env.REACT_APP_API_URL}/api/v1`
-  : 'http://localhost:5000/api/v1';
+// Get the API base URL with proper fallback handling
+const getApiBaseUrl = () => {
+  // Check if we're in production (on Render)
+  const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+  
+  if (isProduction) {
+    // If we're on a Render frontend, assume the backend is also on Render
+    // Extract the frontend app name and construct the backend URL
+    const frontendHost = window.location.hostname;
+    if (frontendHost.includes('football-prediction-frontend')) {
+      // Replace frontend with backend in the hostname
+      const backendHost = frontendHost.replace('football-prediction-frontend', 'football-prediction-backend');
+      return `https://${backendHost}`;
+    }
+  }
+  
+  // Use environment variable if available
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // Default to localhost for development
+  return 'http://localhost:5000';
+};
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Enable cookie support
-});
+const API_BASE_URL = getApiBaseUrl();
+
+// Configure axios defaults
+axios.defaults.baseURL = API_BASE_URL;
+axios.defaults.headers.common['Content-Type'] = 'application/json';
+
+// Add response interceptor for better error handling
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.code === 'ERR_NETWORK' || error.code === 'ERR_NAME_NOT_RESOLVED') {
+      console.error('API connection error. Backend might be down or URL is incorrect:', error.config?.url);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Token management
 const tokenManager = {
@@ -28,7 +58,7 @@ const tokenManager = {
 };
 
 // Request interceptor for auth
-api.interceptors.request.use(
+axios.interceptors.request.use(
   (config) => {
     // Add auth token if available
     const token = tokenManager.getAccessToken();
@@ -65,7 +95,7 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-api.interceptors.response.use(
+axios.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
@@ -76,7 +106,7 @@ api.interceptors.response.use(
           failedQueue.push({ resolve, reject });
         }).then(token => {
           originalRequest.headers.Authorization = `Bearer ${token}`;
-          return api(originalRequest);
+          return axios(originalRequest);
         }).catch(err => {
           return Promise.reject(err);
         });
@@ -89,7 +119,7 @@ api.interceptors.response.use(
       
       if (refreshToken) {
         try {
-          const response = await api.post('/auth/refresh', {}, {
+          const response = await axios.post('/api/v1/auth/refresh', {}, {
             headers: {
               Authorization: `Bearer ${refreshToken}`
             }
@@ -100,7 +130,7 @@ api.interceptors.response.use(
           processQueue(null, tokens.access_token);
           
           originalRequest.headers.Authorization = `Bearer ${tokens.access_token}`;
-          return api(originalRequest);
+          return axios(originalRequest);
         } catch (err) {
           processQueue(err, null);
           tokenManager.clearTokens();
@@ -264,19 +294,19 @@ export interface APIResponse<T> {
 
 // Teams
 export const getTeams = async (competition?: string): Promise<TeamWithStats[]> => {
-  const response = await api.get<APIResponse<{ teams: TeamWithStats[] }>>('/teams', {
+  const response = await axios.get<APIResponse<{ teams: TeamWithStats[] }>>('/api/v1/teams', {
     params: { competition },
   });
   return response.data.data.teams;
 };
 
 export const getTeamDetails = async (teamId: number, season?: string) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     team: Team;
     statistics: TeamStatistics;
     recent_matches: Match[];
-    injured_players: any[];
-  }>(`/teams/${teamId}`, {
+    players: any[];
+  }>(`/api/v1/teams/${teamId}`, {
     params: { season },
   });
   return response.data;
@@ -291,17 +321,17 @@ export const getMatches = async (filters: {
   status?: string;
   page?: number;
 }) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     matches: Match[];
     pagination: PaginationResponse<Match>['pagination'];
-  }>('/matches', {
+  }>('/api/v1/matches', {
     params: filters,
   });
   return response.data;
 };
 
 export const getMatchDetails = async (matchId: number) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     match: MatchDetails;
     head_to_head: HeadToHead | null;
     prediction: Prediction | null;
@@ -326,7 +356,7 @@ export const getPredictions = async (filters: {
   page?: number;
   competition?: string;
 }) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     predictions: any[];
     pagination: PaginationResponse<any>['pagination'];
   }>('/predictions', {
@@ -336,7 +366,7 @@ export const getPredictions = async (filters: {
 };
 
 export const createPrediction = async (matchId: number) => {
-  const response = await api.post<any>(`/predictions/${matchId}`);
+  const response = await axios.post<any>(`/api/v1/predictions/${matchId}`);
   return response.data;
 };
 
@@ -344,7 +374,7 @@ export const getUpcomingPredictions = async () => {
   // Use SportMonks API endpoint for upcoming fixtures with predictions
   const days = 7; // Get fixtures for next 7 days
   const response = await axios.get<{ fixtures: any[] }>(
-    `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/sportmonks/fixtures/upcoming`,
+    `/api/sportmonks/fixtures/upcoming`,
     {
       params: { days, predictions: true }
     }
@@ -378,7 +408,7 @@ export const getUpcomingMatches = async (limit?: number) => {
   // Use SportMonks API endpoint for upcoming fixtures
   const days = 7; // Get fixtures for next 7 days
   const response = await axios.get<{ fixtures: any[] }>(
-    `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/sportmonks/fixtures/upcoming`,
+    `/api/sportmonks/fixtures/upcoming`,
     {
       params: { days, predictions: false }
     }
@@ -402,12 +432,12 @@ export const getUpcomingMatches = async (limit?: number) => {
 
 // Statistics
 export const getCompetitions = async () => {
-  const response = await api.get<{ competitions: string[] }>('/statistics/competitions');
+  const response = await axios.get<{ competitions: string[] }>('/api/v1/statistics/competitions');
   return response.data.competitions;
 };
 
 export const getLeagueTable = async (competition: string, season?: string) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     competition: string;
     season: string;
     available_seasons: string[];
@@ -421,7 +451,7 @@ export const getLeagueTable = async (competition: string, season?: string) => {
 
 // Team Players
 export const getTeamPlayers = async (teamId: number) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     players: Array<{
       id: number;
       name: string;
@@ -437,7 +467,7 @@ export const getTeamPlayers = async (teamId: number) => {
 
 // Team Matches
 export const getTeamMatches = async (teamId: number, limit: number = 20) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     matches: Match[];
   }>('/matches', {
     params: {
@@ -450,7 +480,7 @@ export const getTeamMatches = async (teamId: number, limit: number = 20) => {
 
 // Team Statistics
 export const getTeamStatistics = async (teamId: number, season?: string) => {
-  const response = await api.get<{
+  const response = await axios.get<{
     statistics: TeamStatistics & {
       position?: number;
       points?: number;
@@ -463,7 +493,7 @@ export const getTeamStatistics = async (teamId: number, season?: string) => {
 
 // Model
 export const getModelStatus = async () => {
-  const response = await api.get<{
+  const response = await axios.get<{
     is_trained: boolean;
     model_version: string;
     features: string[];
@@ -498,18 +528,18 @@ export const getModelStatus = async () => {
 };
 
 export const trainModel = async () => {
-  const response = await api.post<{ message: string }>('/model/train');
+  const response = await axios.post<{ message: string }>('/api/v1/model/train');
   return response.data;
 };
 
 // Sync
 export const syncTeams = async (competitionId: number) => {
-  const response = await api.post<{ message: string }>(`/sync/teams/${competitionId}`);
+  const response = await axios.post<{ message: string }>(`/api/v1/sync/teams/${competitionId}`);
   return response.data;
 };
 
 export const syncMatches = async (competitionId: number, season?: string) => {
-  const response = await api.post<{ message: string }>(`/sync/matches/${competitionId}`, {
+  const response = await axios.post<{ message: string }>(`/api/v1/sync/matches/${competitionId}`, {
     season,
   });
   return response.data;
@@ -523,7 +553,7 @@ export const authAPI = {
     email: string;
     password: string;
   }) => {
-    const response = await api.post('/auth/register', data);
+    const response = await axios.post('/api/v1/auth/register', data);
     if (response.data.tokens) {
       tokenManager.setTokens(response.data.tokens);
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -536,7 +566,7 @@ export const authAPI = {
     username: string;
     password: string;
   }) => {
-    const response = await api.post('/auth/login', data);
+    const response = await axios.post('/api/v1/auth/login', data);
     if (response.data.tokens) {
       tokenManager.setTokens(response.data.tokens);
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -547,7 +577,7 @@ export const authAPI = {
   // Logout
   logout: async () => {
     try {
-      await api.post('/auth/logout');
+      await axios.post('/api/v1/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -558,13 +588,13 @@ export const authAPI = {
 
   // Get current user
   getCurrentUser: async () => {
-    const response = await api.get('/auth/me');
+    const response = await axios.get('/api/v1/auth/me');
     return response.data;
   },
 
   // Generate API key
   generateApiKey: async () => {
-    const response = await api.post('/auth/api-key');
+    const response = await axios.post('/api/v1/auth/api-key');
     return response.data;
   },
 
@@ -581,6 +611,6 @@ export const authAPI = {
 };
 
 // Export everything
-export { tokenManager, api };
+export { tokenManager, axios };
 
-export default api;
+export default axios;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Row, Col, Table, Alert, Form, Button } from 'react-bootstrap';
 import { DollarSign, TrendingUp, AlertTriangle, Filter, ChevronUp } from 'lucide-react';
-import axios from 'axios';
+import axios from '../services/api';
 import './ValueBets.css';
 
 interface ValueBet {
@@ -31,7 +31,7 @@ const ValueBets: React.FC = () => {
       });
 
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/value-bets?${params}`
+        `/api/sportmonks/value-bets?${params}`
       );
       
       setValueBets(response.data.value_bets);

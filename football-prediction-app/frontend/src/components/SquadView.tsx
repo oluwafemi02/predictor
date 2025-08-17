@@ -12,7 +12,7 @@ import {
   Button,
   Modal
 } from 'react-bootstrap';
-import axios from 'axios';
+import axios from '../services/api';
 import './SquadView.css';
 
 interface Player {
@@ -63,41 +63,37 @@ const SquadView: React.FC = () => {
   const fetchLeagues = async () => {
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/leagues`
+        `/api/sportmonks/leagues`
       );
       setLeagues(response.data.leagues || []);
-    } catch (err) {
-      console.error('Error fetching leagues:', err);
+    } catch (error) {
+      console.error('Error fetching leagues:', error);
     }
   };
 
-  const fetchTeamsByLeague = async (leagueId: string) => {
-    setLoading(true);
-    setError(null);
+  const fetchLeagueTeams = async (leagueId: number) => {
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/leagues/${leagueId}/teams`
+        `/api/sportmonks/leagues/${leagueId}/teams`
       );
       setTeams(response.data.teams || []);
-    } catch (err) {
-      console.error('Error fetching teams:', err);
-      setError('Failed to fetch teams');
-      setTeams([]);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
     }
   };
 
-  const fetchTeamSquad = async (teamId: number) => {
+  const fetchSquad = async (teamId: number) => {
     setLoadingSquad(true);
     setError(null);
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/squad/${teamId}`
+        `/api/sportmonks/squad/${teamId}`
       );
       console.log('Squad data received:', response.data);
-      
-      if (response.data) {
+      if (response.data.error) {
+        setError(response.data.error);
+        setSelectedTeam(null);
+      } else {
         const squadData = response.data;
         
         // Transform the data to match the expected format
@@ -129,19 +125,17 @@ const SquadView: React.FC = () => {
         }
         
         setShowModal(true);
-      } else {
-        setError('No team data received');
       }
-    } catch (err: any) {
-      console.error('Error fetching team squad:', err);
-      let errorMessage = 'Failed to fetch squad data';
+    } catch (error: any) {
+      console.error('Error fetching squad:', error);
+      let errorMessage = 'Failed to load squad data';
       
-      if (err.response) {
-        errorMessage = err.response.data?.message || err.response.data?.error || `Server error: ${err.response.status}`;
-      } else if (err.request) {
+      if (error.response) {
+        errorMessage = error.response.data?.message || error.response.data?.error || `Server error: ${error.response.status}`;
+      } else if (error.request) {
         errorMessage = 'Unable to reach the server. Please check your connection.';
       } else {
-        errorMessage = err.message || 'An unexpected error occurred';
+        errorMessage = error.message || 'An unexpected error occurred';
       }
       
       setError(errorMessage);
@@ -151,24 +145,18 @@ const SquadView: React.FC = () => {
   };
 
   const searchTeams = async () => {
-    if (searchQuery.length < 3) {
-      setError('Search query must be at least 3 characters');
+    if (!searchQuery.trim()) {
+      setTeams([]);
       return;
     }
 
-    setLoading(true);
-    setError(null);
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/search/teams?q=${searchQuery}`
+        `/api/sportmonks/search/teams?q=${searchQuery}`
       );
       setTeams(response.data.teams || []);
-    } catch (err) {
-      console.error('Error searching teams:', err);
-      setError('Failed to search teams');
-      setTeams([]);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Error searching teams:', error);
     }
   };
 
@@ -176,7 +164,7 @@ const SquadView: React.FC = () => {
     const leagueId = e.target.value;
     setSelectedLeague(leagueId);
     if (leagueId) {
-      fetchTeamsByLeague(leagueId);
+      fetchLeagueTeams(parseInt(leagueId, 10));
     } else {
       setTeams([]);
     }
@@ -283,7 +271,7 @@ const SquadView: React.FC = () => {
                     variant="primary"
                     size="sm"
                     className="mt-auto"
-                    onClick={() => fetchTeamSquad(team.id)}
+                    onClick={() => fetchSquad(team.id)}
                     disabled={loadingSquad}
                   >
                     View Squad
