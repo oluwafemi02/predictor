@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Row, Col, Table, Button, ButtonGroup } from 'react-bootstrap';
 import { DollarSign, TrendingUp, Calendar, Users } from 'lucide-react';
-import axios from 'axios';
+import axios from '../services/api';
 import './OddsDisplay.css';
 
 interface OddsData {
@@ -59,7 +59,7 @@ const OddsDisplay: React.FC<OddsDisplayProps> = ({ fixtureId, showProbabilities 
     setError(null);
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/odds/${fixtureId}?market_id=1`
+        `/api/sportmonks/odds/${fixtureId}?market_id=1`
       );
       
       if (response.data && response.data.odds) {

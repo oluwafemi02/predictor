@@ -1037,6 +1037,86 @@ def get_league_table():
             'table': []
         })
 
+@api_bp.route('/predictions/today', methods=['GET'])
+def get_todays_predictions():
+    """Get today's match predictions"""
+    try:
+        limit = request.args.get('limit', 15, type=int)
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Get today's matches
+        matches = Match.query.filter(
+            Match.match_date >= today,
+            Match.match_date < tomorrow,
+            (Match.status != 'finished') | (Match.home_score.is_(None))
+        ).order_by(Match.match_date.asc()).limit(limit).all()
+        
+        predictions = []
+        for match in matches:
+            # Get recent form
+            home_form = Match.query.filter(
+                (Match.home_team_id == match.home_team_id) | (Match.away_team_id == match.home_team_id),
+                Match.status == 'finished',
+                Match.home_score.isnot(None)
+            ).order_by(Match.match_date.desc()).limit(5).all()
+            
+            away_form = Match.query.filter(
+                (Match.home_team_id == match.away_team_id) | (Match.away_team_id == match.away_team_id),
+                Match.status == 'finished',
+                Match.home_score.isnot(None)
+            ).order_by(Match.match_date.desc()).limit(5).all()
+            
+            # Calculate simple prediction
+            home_wins = sum(1 for m in home_form if (
+                (m.home_team_id == match.home_team_id and m.home_score > m.away_score) or
+                (m.away_team_id == match.home_team_id and m.away_score > m.home_score)
+            ))
+            
+            away_wins = sum(1 for m in away_form if (
+                (m.home_team_id == match.away_team_id and m.home_score > m.away_score) or
+                (m.away_team_id == match.away_team_id and m.away_score > m.home_score)
+            ))
+            
+            total_games = max(len(home_form) + len(away_form), 1)
+            home_win_prob = (home_wins + 1) / (total_games + 3)  # Smoothing
+            away_win_prob = (away_wins + 1) / (total_games + 3)
+            draw_prob = 1 - home_win_prob - away_win_prob
+            
+            predictions.append({
+                'id': match.id,
+                'date': match.match_date.isoformat() if match.match_date else None,
+                'home_team': {
+                    'id': match.home_team_id,
+                    'name': match.home_team.name if match.home_team else 'Unknown'
+                },
+                'away_team': {
+                    'id': match.away_team_id,
+                    'name': match.away_team.name if match.away_team else 'Unknown'
+                },
+                'prediction': {
+                    'home_win': round(home_win_prob, 2),
+                    'draw': round(draw_prob, 2),
+                    'away_win': round(away_win_prob, 2),
+                    'confidence': 0.75
+                },
+                'competition': match.competition,
+                'status': match.status
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'data': predictions,
+            'count': len(predictions),
+            'date': today.isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Error getting today's predictions: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @api_bp.route('/predictions', methods=['GET'])
 def get_predictions():
     """Get predictions with filters"""
@@ -1179,12 +1259,7 @@ def get_match_details(match_id):
             match.away_team_id,
             match.id
         )
-        
-        # Extract h2h variables
-        home_wins = h2h_stats.get('home_wins', 0)
-        away_wins = h2h_stats.get('away_wins', 0)
-        draws = h2h_stats.get('draws', 0)
-        
+            
         # Get recent form for both teams
         home_form = Match.query.filter(
             (Match.home_team_id == match.home_team_id) | (Match.away_team_id == match.home_team_id),
@@ -1257,7 +1332,7 @@ def get_match_details(match_id):
                 'factors': {
                     'home_form': home_form_str or 'No data',
                     'away_form': away_form_str or 'No data',
-                    'head_to_head': f'H{home_wins} D{draws} A{away_wins}'
+                    'head_to_head': f'H{h2h_stats.get("home_wins", 0)} D{h2h_stats.get("draws", 0)} A{h2h_stats.get("away_wins", 0)}'
                 }
             }
         
@@ -1287,13 +1362,7 @@ def get_match_details(match_id):
                 'attendance': match.attendance,
                 'has_prediction': prediction is not None
             },
-            'head_to_head': {
-                'total_matches': h2h_stats.get('total_matches', 0),
-                'home_wins': home_wins,
-                'away_wins': away_wins,
-                'draws': draws,
-                'last_5_results': h2h_stats.get('last_5_results', [])
-            },
+            'head_to_head': h2h_stats,
             'prediction': prediction,
             'team_form': {
                 'home_team': {

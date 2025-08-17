@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Row, Col, Alert, Form, Button, Tab, Nav } from 'react-bootstrap';
 import { DollarSign, TrendingUp, AlertTriangle, Calendar, Target } from 'lucide-react';
-import axios from 'axios';
+import axios from '../services/api';
 import PredictionDetails from './PredictionDetails';
 import OddsDisplay from './OddsDisplay';
 import './EnhancedValueBets.css';
@@ -54,13 +54,11 @@ const EnhancedValueBets: React.FC = () => {
       });
 
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/all?${params}`,
+        `/api/sportmonks/fixtures/all?${params}`,
         {
           headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          withCredentials: false
+            'Content-Type': 'application/json',
+          }
         }
       );
       

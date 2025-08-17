@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Row, Col, ProgressBar } from 'react-bootstrap';
 import { Clock, Activity, TrendingUp } from 'lucide-react';
-import axios from 'axios';
+import axios from '../services/api';
 import './LiveScores.css';
 
 interface LiveFixture {
@@ -42,9 +42,7 @@ const LiveScores: React.FC = () => {
 
   const fetchLiveScores = async () => {
     try {
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/sportmonks/fixtures/live`
-      );
+      const response = await axios.get('/api/sportmonks/fixtures/live');
       setFixtures(response.data.fixtures);
       setLastUpdate(new Date());
       setError(null);
