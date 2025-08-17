@@ -115,21 +115,8 @@ def add_security_headers(response):
     if os.environ.get('FLASK_ENV') == 'production':
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     
-    # IMPORTANT: Don't override CORS headers if they're already set by Flask-CORS
-    # Check if Access-Control-Allow-Origin is already set
-    if 'Access-Control-Allow-Origin' not in response.headers:
-        # Only set CORS headers if they haven't been set by Flask-CORS
-        origin = request.headers.get('Origin')
-        # Get allowed origins from config
-        from flask import current_app
-        allowed_origins = current_app.config.get('CORS_ORIGINS', [])
-        
-        if origin and origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-API-Key'
-            response.headers['Access-Control-Max-Age'] = '3600'
+    # IMPORTANT: Don't override CORS headers - let Flask-CORS handle them
+    # Flask-CORS will properly set all CORS headers based on the configuration
     
     return response
 

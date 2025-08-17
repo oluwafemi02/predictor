@@ -39,6 +39,25 @@ def create_app(config_name=None):
     # Log CORS configuration for debugging
     logger.info(f"CORS configured with origins: {app.config['CORS_ORIGINS']}")
     
+    # Add explicit CORS headers after each request to ensure they're always present
+    @app.after_request
+    def after_request_cors(response):
+        """Ensure CORS headers are always present"""
+        origin = request.headers.get('Origin')
+        
+        # Check if origin is allowed
+        if origin and origin in app.config['CORS_ORIGINS']:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            
+            # For preflight requests
+            if request.method == 'OPTIONS':
+                response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-API-Key,Accept'
+                response.headers['Access-Control-Max-Age'] = '3600'
+        
+        return response
+    
     # Add explicit OPTIONS handler for preflight requests
     @app.before_request
     def handle_preflight():
@@ -51,7 +70,7 @@ def create_app(config_name=None):
             if origin and origin in app.config['CORS_ORIGINS']:
                 response.headers['Access-Control-Allow-Origin'] = origin
                 response.headers['Access-Control-Allow-Headers'] = "Content-Type,Authorization,X-API-Key,Accept"
-                response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS"
+                response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
                 response.headers['Access-Control-Allow-Credentials'] = 'true'
                 response.headers['Access-Control-Max-Age'] = '3600'
                 logger.info(f"CORS headers set for origin: {origin}")
@@ -66,7 +85,9 @@ def create_app(config_name=None):
     except ImportError:
         print("Warning: JWT authentication not available")
     
-    # Add security headers to all responses
+    # Note: add_security_headers is registered after after_request_cors
+    # This ensures CORS headers are set first, then security headers are added
+    # The after_request decorators are called in reverse order of registration
     app.after_request(add_security_headers)
     
     # Register blueprints
