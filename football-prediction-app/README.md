@@ -1,256 +1,166 @@
-# Football Match Prediction App
+# Football Prediction App
 
-A comprehensive web-based application that predicts football match outcomes using machine learning. The app analyzes team performance, player statistics, injuries, historical data, and various other factors to provide accurate predictions.
+A comprehensive football match prediction system using machine learning, built with Flask (backend) and React (frontend).
 
 ## Features
 
-- **Match Predictions**: Accurate predictions for upcoming football matches with probability distributions
-- **Live Data Integration**: Fetches real-time data from football APIs
-- **Machine Learning Models**: Ensemble of XGBoost, LightGBM, Random Forest, and Gradient Boosting
-- **Comprehensive Analysis**: Considers team form, head-to-head records, injuries, and performance metrics
-- **Beautiful UI**: Modern, responsive interface built with React and Material-UI
-- **Real-time Updates**: Automatic data synchronization and prediction updates
-- **Statistical Insights**: Detailed team statistics, league tables, and performance analytics
+- 🏆 **Match Predictions**: AI-powered predictions using XGBoost and LightGBM
+- 📊 **Live Fixtures**: Real-time match data from SportMonks API
+- 👥 **Team Management**: Browse teams and squad information
+- 📈 **Betting Odds**: Integration with RapidAPI for odds data
+- 🔄 **Background Sync**: Automated data updates via Celery
+- 🚀 **Production Ready**: Deployed on Render with PostgreSQL and Redis
 
-## Technology Stack
+## Tech Stack
 
 ### Backend
-- **Framework**: Flask (Python)
-- **Database**: SQLAlchemy with SQLite/PostgreSQL
-- **ML Libraries**: scikit-learn, XGBoost, LightGBM
-- **Task Queue**: Celery with Redis
-- **API Integration**: Multiple football data providers
+- **Framework**: Flask 3.0
+- **Database**: PostgreSQL with SQLAlchemy
+- **Cache**: Redis
+- **ML**: scikit-learn, XGBoost, LightGBM
+- **Task Queue**: Celery
+- **API Integration**: SportMonks, RapidAPI
 
 ### Frontend
-- **Framework**: React with TypeScript
-- **UI Library**: Material-UI (MUI)
-- **State Management**: React Query
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS
+- **Data Fetching**: TanStack Query
 - **Routing**: React Router v6
-- **Charts**: Recharts
-- **Date Handling**: date-fns
 
-## Installation
+## Quick Start
 
-### Prerequisites
-- Python 3.8+
-- Node.js 14+
-- Redis (optional, for background tasks)
-- PostgreSQL (optional, for production)
-
-### Backend Setup
-
-1. Navigate to the backend directory:
 ```bash
-cd backend
+# Clone the repository
+git clone <repository-url>
+cd football-prediction-app
+
+# Set up environment variables
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
+# Install and run with Make
+make setup       # Install dependencies
+make dev         # Run backend
+make frontend-dev # Run frontend (in another terminal)
 ```
 
-2. Create a virtual environment:
+Visit http://localhost:5173 to see the app.
+
+## Documentation
+
+- 📚 [Getting Started Guide](./DOCS/GETTING_STARTED.md) - Local development setup
+- 🚀 [Deployment Guide](./DOCS/DEPLOYMENT_RENDER.md) - Deploy to Render
+- 📡 [API Documentation](./DOCS/API_USAGE.md) - API endpoints and examples
+- 🏗️ [Architecture Overview](./DOCS/ARCHITECTURE_AUDIT.md) - System design and improvements
+
+## Project Structure
+
+```
+football-prediction-app/
+├── backend/
+│   ├── app.py              # Flask application factory
+│   ├── models.py           # Database models
+│   ├── api_routes.py       # API endpoints
+│   ├── utils/              # Utilities (HTTP client, cache)
+│   └── tests/              # Backend tests
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # Reusable components
+│   │   ├── pages/          # Page components
+│   │   └── lib/            # API client
+│   └── public/             # Static assets
+├── DOCS/                   # Documentation
+└── .github/workflows/      # CI/CD pipelines
+```
+
+## Key Improvements Made
+
+### ✅ Fixed Issues
+- Fixed ImportError for `handle_api_errors` and `log_performance`
+- Resolved CORS configuration warnings
+- Added `/healthz` endpoint for health checks
+
+### 🔧 Backend Enhancements
+- Added resilient HTTP client with retry logic and circuit breakers
+- Implemented caching utilities with Redis
+- Created comprehensive error handling
+- Added `/api/version` endpoint
+
+### 🎨 Frontend Redesign
+- Migrated to Vite + React + TypeScript
+- Implemented clean, minimal UI with Tailwind CSS
+- Added proper loading, error, and empty states
+- Created responsive navigation
+
+### 📝 Documentation
+- Comprehensive getting started guide
+- Detailed Render deployment instructions
+- API usage documentation with examples
+
+### 🔄 CI/CD
+- GitHub Actions workflow for testing
+- Docker support for containerization
+- Security scanning with Trivy
+
+## API Examples
+
+### Get Fixtures
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+curl "http://localhost:5000/api/v1/fixtures?date_from=2025-01-01&date_to=2025-01-07"
 ```
 
-3. Install dependencies:
+### Get Predictions
 ```bash
-pip install -r requirements.txt
+curl "http://localhost:5000/api/v1/predictions?min_confidence=80"
 ```
 
-4. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your API keys and configuration
-```
+See [API Documentation](./DOCS/API_USAGE.md) for more examples.
 
-5. Initialize the database:
-```bash
-flask db init
-flask db migrate
-flask db upgrade
-```
+## Environment Variables
 
-6. Run the Flask server:
-```bash
-python app.py
-```
+### Required
+- `DATABASE_URL` - PostgreSQL connection string
+- `REDIS_URL` - Redis connection string
+- `SPORTMONKS_API_KEY` - SportMonks API key
+- `SECRET_KEY` - Flask secret key
 
-### Frontend Setup
+### Optional
+- `RAPIDAPI_KEY` - For odds data
+- `ENABLE_SCHEDULER` - Enable background sync
+- `CORS_ORIGINS` - Allowed CORS origins
 
-1. Navigate to the frontend directory:
-```bash
-cd frontend
-```
+## Testing
 
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Create environment file:
-```bash
-echo "REACT_APP_API_URL=http://localhost:5000/api" > .env
-```
-
-4. Start the development server:
-```bash
-npm start
-```
-
-## Configuration
-
-### API Keys
-
-The app supports multiple football data providers. You'll need to obtain API keys from at least one:
-
-1. **Football-Data.org** (Free tier available)
-   - Sign up at https://www.football-data.org/
-   - Add key to `FOOTBALL_API_KEY` in `.env`
-
-2. **API-Football** (via RapidAPI)
-   - Sign up at https://rapidapi.com/api-sports/api/api-football/
-   - More comprehensive data but requires subscription
-
-3. **TheSportsDB** (Free)
-   - No API key required for basic usage
-   - Limited to historical data
-
-### Database Configuration
-
-For production, use PostgreSQL:
-```
-DATABASE_URL=postgresql://username:password@localhost:5432/football_predictions
-```
-
-## Usage
-
-### 1. Initial Setup
-
-After installation, you need to:
-
-1. **Sync Teams and Competitions**:
-   - Go to Model Status page
-   - Click "Sync Data" to fetch teams and competitions
-
-2. **Train the Model**:
-   - Navigate to Model Status
-   - Click "Train Model" (requires historical match data)
-
-### 2. Making Predictions
-
-- **Dashboard**: View upcoming predictions and recent results
-- **Predictions**: Browse all predictions with filtering options
-- **Matches**: View and filter all matches
-- **Teams**: Explore team statistics and performance
-
-### 3. API Endpoints
-
-Key endpoints:
-
-- `GET /api/teams` - List all teams
-- `GET /api/matches` - List matches with filters
-- `GET /api/predictions` - Get predictions
-- `POST /api/predictions/{match_id}` - Generate prediction for a match
-- `GET /api/upcoming-predictions` - Get predictions for upcoming matches
-- `POST /api/model/train` - Train the prediction model
-
-## Model Details
-
-The prediction model uses an ensemble approach with multiple algorithms:
-
-### Features Used
-- Team win/draw/loss rates
-- Goals scored/conceded per match
-- Home/away specific performance
-- Recent form (last 5 matches)
-- Head-to-head statistics
-- Player injuries impact
-- Days since last match (fatigue)
-- Advanced stats (possession, shots, pass accuracy)
-
-### Prediction Outputs
-- Win/Draw/Loss probabilities
-- Expected goals for each team
-- Over/Under 2.5 goals probability
-- Both teams to score probability
-- Confidence score
-- Key factors influencing the prediction
-
-## Development
-
-### Running Tests
 ```bash
 # Backend tests
 cd backend
-pytest
+pytest tests/ -v --cov
 
 # Frontend tests
 cd frontend
 npm test
 ```
 
-### Code Structure
-
-```
-football-prediction-app/
-├── backend/
-│   ├── app.py              # Main Flask application
-│   ├── models.py           # Database models
-│   ├── config.py           # Configuration
-│   ├── data_collector.py   # API data fetching
-│   ├── prediction_model.py # ML model implementation
-│   └── requirements.txt    # Python dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── components/     # Reusable components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API services
-│   │   └── App.tsx         # Main app component
-│   └── package.json        # Node dependencies
-└── README.md
-```
-
-## Deployment
-
-### Docker Deployment
-
-```dockerfile
-# Build and run with Docker Compose
-docker-compose up --build
-```
-
-### Manual Deployment
-
-1. Set up a production server (Ubuntu/Debian recommended)
-2. Install Python, Node.js, PostgreSQL, Redis, and Nginx
-3. Configure Nginx as reverse proxy
-4. Use Gunicorn for Flask
-5. Build React app: `npm run build`
-6. Serve static files with Nginx
-
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
 This project is licensed under the MIT License.
 
-## Acknowledgments
-
-- Football data providers for APIs
-- Open source ML libraries
-- React and Material-UI communities
-
 ## Support
 
-For issues and questions:
-- Create an issue on GitHub
-- Check existing documentation
-- Review API provider documentation
+For issues or questions:
+- Check the [documentation](./DOCS/)
+- Review existing [GitHub issues]
+- Contact the maintainers
 
 ---
 
-**Note**: This app is for educational and entertainment purposes. Always gamble responsibly if using predictions for betting.
+Built with ❤️ for football prediction enthusiasts
