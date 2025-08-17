@@ -337,7 +337,7 @@ def create_app(config_name=None):
         }
     
     @app.route('/api/health', methods=['GET'])
-    def health_check():
+    def api_health_check():
         """Health check endpoint to verify all services are configured and running"""
         health_status = {
             'status': 'healthy',
