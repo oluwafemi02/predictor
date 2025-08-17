@@ -128,6 +128,14 @@ def create_app(config_name=None):
     except ImportError as e:
         print(f"Warning: Main page predictions routes not available: {str(e)}")
     
+    # Register simple v2 API routes
+    try:
+        from simple_routes import simple_bp
+        app.register_blueprint(simple_bp)
+        print("Simple v2 API routes registered successfully")
+    except ImportError as e:
+        print(f"Warning: Simple v2 API routes not available: {str(e)}")
+    
     # Error handlers
     @app.errorhandler(ValidationError)
     def handle_validation_error(error):
