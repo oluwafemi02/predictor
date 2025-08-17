@@ -1249,7 +1249,7 @@ def get_match_details(match_id):
     try:
         # Get match with all details
         match = MatchService.get_match_with_details(match_id)
-    
+        
         if not match:
             raise DataNotFoundError(f"Match with ID {match_id} not found", resource="match")
         
@@ -1332,7 +1332,7 @@ def get_match_details(match_id):
                 'factors': {
                     'home_form': home_form_str or 'No data',
                     'away_form': away_form_str or 'No data',
-                    'head_to_head': f'H{h2h_stats["home_wins"]} D{h2h_stats["draws"]} A{h2h_stats["away_wins"]}'
+                    'head_to_head': f'H{h2h_stats.get("home_wins", 0)} D{h2h_stats.get("draws", 0)} A{h2h_stats.get("away_wins", 0)}'
                 }
             }
         
