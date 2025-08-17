@@ -364,6 +364,11 @@ def create_app(config_name=None):
         
         return jsonify(health_status), 200 if health_status['status'] == 'healthy' else 503
     
+    @app.route('/healthz', methods=['GET'])
+    def healthz():
+        """Simple health check endpoint for Render"""
+        return jsonify({"status": "ok"}), 200
+    
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')
     def serve_react_app(path):
