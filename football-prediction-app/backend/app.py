@@ -46,11 +46,24 @@ def create_app(config_name=None):
         """Ensure CORS headers are always present"""
         origin = request.headers.get('Origin')
         
-        # Check if origin is allowed
-        if origin and origin in app.config['CORS_ORIGINS']:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        # Check if origin is allowed (with wildcard support)
+        if origin:
+            allowed = False
+            for allowed_origin in app.config['CORS_ORIGINS']:
+                if allowed_origin == origin:
+                    allowed = True
+                    break
+                elif allowed_origin.startswith('https://*.') and origin.startswith('https://'):
+                    # Handle wildcard subdomains
+                    domain = allowed_origin[9:]  # Remove 'https://*.'
+                    if origin.endswith(domain):
+                        allowed = True
+                        break
             
+            if allowed:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+        
             # For preflight requests
             if request.method == 'OPTIONS':
                 response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
@@ -68,15 +81,28 @@ def create_app(config_name=None):
             # Log the incoming origin for debugging
             logger.info(f"OPTIONS request from origin: {origin}")
             
-            if origin and origin in app.config['CORS_ORIGINS']:
-                response.headers['Access-Control-Allow-Origin'] = origin
-                response.headers['Access-Control-Allow-Headers'] = "Content-Type,Authorization,X-API-Key,Accept"
-                response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
-                response.headers['Access-Control-Allow-Credentials'] = 'true'
-                response.headers['Access-Control-Max-Age'] = '3600'
-                logger.info(f"CORS headers set for origin: {origin}")
-            else:
-                logger.warning(f"Origin {origin} not in allowed origins: {app.config['CORS_ORIGINS']}")
+            if origin:
+                allowed = False
+                for allowed_origin in app.config['CORS_ORIGINS']:
+                    if allowed_origin == origin:
+                        allowed = True
+                        break
+                    elif allowed_origin.startswith('https://*.') and origin.startswith('https://'):
+                        # Handle wildcard subdomains
+                        domain = allowed_origin[9:]  # Remove 'https://*.'
+                        if origin.endswith(domain):
+                            allowed = True
+                            break
+                
+                if allowed:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                    response.headers['Access-Control-Allow-Headers'] = "Content-Type,Authorization,X-API-Key,Accept"
+                    response.headers['Access-Control-Allow-Methods'] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+                    response.headers['Access-Control-Max-Age'] = '3600'
+                    logger.info(f"CORS headers set for origin: {origin}")
+                else:
+                    logger.warning(f"Origin {origin} not in allowed origins: {app.config['CORS_ORIGINS']}")
             return response
     
     # Initialize JWT authentication
