@@ -128,20 +128,43 @@ def sync_sportmonks_data():
                 'message': 'SportMonks API key not configured'
             }), 400
         
-        from simple_sportmonks_sync import simple_sync
+        # Try improved sync first, fallback to simple sync
         from flask import current_app
         
-        success = simple_sync(current_app._get_current_object())
+        try:
+            from improved_sportmonks_sync import improved_sync
+            success, message = improved_sync(current_app._get_current_object())
+        except ImportError:
+            logger.info("Improved sync not available, using simple sync")
+            from simple_sportmonks_sync import simple_sync
+            success = simple_sync(current_app._get_current_object())
+            message = "SportMonks data sync completed" if success else "Sync failed"
+        
+        # Get counts after sync
+        from sportmonks_models import SportMonksFixture, SportMonksTeam, SportMonksPrediction
+        fixture_count = SportMonksFixture.query.count()
+        team_count = SportMonksTeam.query.count()
+        prediction_count = SportMonksPrediction.query.count()
         
         if success:
             return jsonify({
                 'status': 'success',
-                'message': 'SportMonks data sync completed successfully'
+                'message': message,
+                'data': {
+                    'fixtures': fixture_count,
+                    'teams': team_count,
+                    'predictions': prediction_count
+                }
             })
         else:
             return jsonify({
                 'status': 'error',
-                'message': 'SportMonks data sync failed - check logs for details'
+                'message': message,
+                'data': {
+                    'fixtures': fixture_count,
+                    'teams': team_count,
+                    'predictions': prediction_count
+                }
             }), 500
             
     except Exception as e:
@@ -149,6 +172,136 @@ def sync_sportmonks_data():
         return jsonify({
             'status': 'error',
             'message': str(e)
+        }), 500
+
+@api_bp.route('/data/sportmonks-status', methods=['GET'])
+def sportmonks_status():
+    """Check SportMonks data status"""
+    try:
+        from sportmonks_models import SportMonksFixture, SportMonksTeam, SportMonksPrediction, SportMonksLeague
+        
+        # Get counts
+        fixture_count = SportMonksFixture.query.count()
+        team_count = SportMonksTeam.query.count()
+        prediction_count = SportMonksPrediction.query.count()
+        league_count = SportMonksLeague.query.count()
+        
+        # Get sample data
+        sample_fixtures = SportMonksFixture.query.limit(5).all()
+        fixtures_preview = []
+        
+        for fixture in sample_fixtures:
+            home_team = SportMonksTeam.query.filter_by(team_id=fixture.home_team_id).first()
+            away_team = SportMonksTeam.query.filter_by(team_id=fixture.away_team_id).first()
+            
+            fixtures_preview.append({
+                'id': fixture.fixture_id,
+                'home_team': home_team.name if home_team else 'Unknown',
+                'away_team': away_team.name if away_team else 'Unknown',
+                'date': fixture.starting_at.isoformat() if fixture.starting_at else None,
+                'state': fixture.state_name
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'api_key_configured': bool(os.environ.get('SPORTMONKS_API_KEY')),
+            'data_counts': {
+                'fixtures': fixture_count,
+                'teams': team_count,
+                'predictions': prediction_count,
+                'leagues': league_count
+            },
+            'has_data': fixture_count > 0,
+            'fixtures_preview': fixtures_preview
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking SportMonks status: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'api_key_configured': bool(os.environ.get('SPORTMONKS_API_KEY')),
+            'has_data': False
+        }), 500
+
+@api_bp.route('/data/test-sportmonks', methods=['GET'])
+def test_sportmonks_api():
+    """Test SportMonks API connection"""
+    try:
+        import requests
+        api_key = os.environ.get('SPORTMONKS_API_KEY')
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'SportMonks API key not configured'
+            }), 400
+        
+        headers = {"Authorization": api_key}
+        
+        # Test 1: Basic connection
+        test_results = {
+            'api_key_present': True,
+            'api_key_prefix': api_key[:10] + '...',
+            'tests': []
+        }
+        
+        # Test leagues endpoint
+        leagues_url = "https://api.sportmonks.com/v3/football/leagues"
+        response = requests.get(leagues_url, headers=headers, params={"per_page": 1})
+        
+        test_results['tests'].append({
+            'endpoint': 'leagues',
+            'status_code': response.status_code,
+            'success': response.status_code == 200,
+            'message': 'API connection successful' if response.status_code == 200 else f'Failed with status {response.status_code}'
+        })
+        
+        if response.status_code != 200:
+            test_results['error_detail'] = response.text[:500]
+            return jsonify(test_results), 200
+        
+        # Test today's fixtures
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        fixtures_url = f"https://api.sportmonks.com/v3/football/fixtures/date/{today}"
+        response = requests.get(fixtures_url, headers=headers, params={"per_page": 10})
+        
+        fixture_count = len(response.json().get('data', [])) if response.status_code == 200 else 0
+        
+        test_results['tests'].append({
+            'endpoint': f'fixtures/date/{today}',
+            'status_code': response.status_code,
+            'success': response.status_code == 200,
+            'fixtures_found': fixture_count,
+            'message': f'Found {fixture_count} fixtures for today'
+        })
+        
+        # Test date range
+        start_date = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d')
+        end_date = (datetime.utcnow() + timedelta(days=7)).strftime('%Y-%m-%d')
+        range_url = f"https://api.sportmonks.com/v3/football/fixtures/between/{start_date}/{end_date}"
+        response = requests.get(range_url, headers=headers, params={"per_page": 50})
+        
+        range_count = len(response.json().get('data', [])) if response.status_code == 200 else 0
+        
+        test_results['tests'].append({
+            'endpoint': f'fixtures/between/{start_date}/{end_date}',
+            'status_code': response.status_code,
+            'success': response.status_code == 200,
+            'fixtures_found': range_count,
+            'message': f'Found {range_count} fixtures in date range'
+        })
+        
+        # Overall status
+        test_results['overall_status'] = 'success' if all(test['success'] for test in test_results['tests']) else 'partial'
+        
+        return jsonify(test_results)
+        
+    except Exception as e:
+        logger.error(f"Error testing SportMonks API: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'api_key_present': bool(os.environ.get('SPORTMONKS_API_KEY'))
         }), 500
 
 # Fixtures endpoint (alias for matches)
