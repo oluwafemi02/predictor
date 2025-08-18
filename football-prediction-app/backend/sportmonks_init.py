@@ -152,21 +152,75 @@ def sync_fixtures(client, days_back=30, days_ahead=30):
         start_date = (datetime.utcnow() - timedelta(days=days_back)).strftime('%Y-%m-%d')
         end_date = (datetime.utcnow() + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
         
-        # Get fixtures for date range
-        fixtures_data = client.get_fixtures_by_date_range(start_date, end_date)
+        # Get fixtures for date range with includes
+        fixtures_data = client.get_fixtures_by_date_range(
+            start_date, 
+            end_date,
+            includes=['participants', 'league', 'venue', 'state', 'scores']
+        )
         
         if fixtures_data and 'data' in fixtures_data:
             for fixture in fixtures_data['data']:
                 try:
+                    # Extract team IDs from participants
+                    home_team_id = None
+                    away_team_id = None
+                    participants = fixture.get('participants', [])
+                    
+                    for participant in participants:
+                        if participant.get('meta', {}).get('location') == 'home':
+                            home_team_id = participant['id']
+                            # Also ensure team exists
+                            if not SportMonksTeam.query.get(home_team_id):
+                                new_team = SportMonksTeam(
+                                    team_id=participant['id'],
+                                    name=participant.get('name'),
+                                    short_code=participant.get('short_code'),
+                                    country=participant.get('country', {}).get('name'),
+                                    founded=participant.get('founded'),
+                                    image_path=participant.get('image_path'),
+                                    venue_id=participant.get('venue_id')
+                                )
+                                db.session.add(new_team)
+                        elif participant.get('meta', {}).get('location') == 'away':
+                            away_team_id = participant['id']
+                            # Also ensure team exists
+                            if not SportMonksTeam.query.get(away_team_id):
+                                new_team = SportMonksTeam(
+                                    team_id=participant['id'],
+                                    name=participant.get('name'),
+                                    short_code=participant.get('short_code'),
+                                    country=participant.get('country', {}).get('name'),
+                                    founded=participant.get('founded'),
+                                    image_path=participant.get('image_path'),
+                                    venue_id=participant.get('venue_id')
+                                )
+                                db.session.add(new_team)
+                    
                     existing = SportMonksFixture.query.filter_by(fixture_id=fixture['id']).first()
                     if existing:
                         # Update existing fixture
-                        existing.home_score = fixture.get('scores', {}).get('home_score')
-                        existing.away_score = fixture.get('scores', {}).get('away_score')
+                        if fixture.get('scores'):
+                            # Handle scores array structure
+                            for score in fixture['scores']:
+                                if score.get('description') == 'CURRENT':
+                                    existing.home_score = score.get('score', {}).get('home')
+                                    existing.away_score = score.get('score', {}).get('away')
+                                    break
                         existing.state_id = fixture.get('state_id')
                         existing.state_name = fixture.get('state', {}).get('name')
                         existing.updated_at = datetime.utcnow()
                     else:
+                        # Extract scores from array
+                        home_score = None
+                        away_score = None
+                        if fixture.get('scores'):
+                            for score in fixture['scores']:
+                                if score.get('description') == 'CURRENT':
+                                    home_score = score.get('score', {}).get('home')
+                                    away_score = score.get('score', {}).get('away')
+                                    break
+                        
                         # Create new fixture
                         new_fixture = SportMonksFixture(
                             fixture_id=fixture['id'],
@@ -175,12 +229,12 @@ def sync_fixtures(client, days_back=30, days_ahead=30):
                             season_id=fixture.get('season_id'),
                             stage_id=fixture.get('stage_id'),
                             round_id=fixture.get('round_id'),
-                            home_team_id=fixture.get('home_team_id'),
-                            away_team_id=fixture.get('away_team_id'),
+                            home_team_id=home_team_id,
+                            away_team_id=away_team_id,
                             starting_at=datetime.fromisoformat(fixture['starting_at'].replace('Z', '+00:00')) if fixture.get('starting_at') else None,
                             result_info=fixture.get('result_info'),
-                            home_score=fixture.get('scores', {}).get('home_score'),
-                            away_score=fixture.get('scores', {}).get('away_score'),
+                            home_score=home_score,
+                            away_score=away_score,
                             venue_id=fixture.get('venue_id'),
                             venue_name=fixture.get('venue', {}).get('name'),
                             referee_id=fixture.get('referee_id'),
@@ -210,7 +264,7 @@ def sync_predictions(client):
         upcoming_fixtures = SportMonksFixture.query.filter(
             SportMonksFixture.starting_at > datetime.utcnow(),
             SportMonksFixture.state_id.in_([1, 2, 3, 4])  # Not started or in progress
-        ).all()
+        ).limit(20).all()  # Limit to avoid rate limits
         
         for fixture in upcoming_fixtures:
             try:
@@ -219,26 +273,68 @@ def sync_predictions(client):
                 if existing:
                     continue
                 
-                # Get prediction from SportMonks
-                prediction_data = client.get_predictions_by_fixture(fixture.fixture_id)
-                if prediction_data and 'data' in prediction_data and prediction_data['data']:
-                    pred = prediction_data['data'][0]  # Take first prediction
+                # Get fixture with predictions from SportMonks
+                # Using the include parameter as shown in the example
+                fixture_data = client.get_fixture(
+                    fixture.fixture_id,
+                    includes=['predictions.type']
+                )
+                
+                if fixture_data and 'data' in fixture_data:
+                    predictions = fixture_data['data'].get('predictions', [])
                     
-                    new_prediction = SportMonksPrediction(
-                        fixture_id=fixture.fixture_id,
-                        predictions_data=pred.get('predictions', {}),
-                        home_win_probability=pred.get('predictions', {}).get('home', 0) / 100.0,
-                        draw_probability=pred.get('predictions', {}).get('draw', 0) / 100.0,
-                        away_win_probability=pred.get('predictions', {}).get('away', 0) / 100.0,
-                        btts_probability=pred.get('predictions', {}).get('btts', 0) / 100.0,
-                        over_25_probability=pred.get('predictions', {}).get('over_2_5', 0) / 100.0,
-                        under_25_probability=pred.get('predictions', {}).get('under_2_5', 0) / 100.0,
-                        predicted_home_score=pred.get('predictions', {}).get('home_score'),
-                        predicted_away_score=pred.get('predictions', {}).get('away_score'),
-                        confidence_score=0.75  # Default confidence
-                    )
-                    db.session.add(new_prediction)
-                    count += 1
+                    # Extract key predictions from the array
+                    fulltime_result = None
+                    btts = None
+                    over_25 = None
+                    correct_score = None
+                    
+                    for pred in predictions:
+                        pred_type = pred.get('type', {}).get('developer_name', '')
+                        pred_values = pred.get('predictions', {})
+                        
+                        if pred_type == 'FULLTIME_RESULT_PROBABILITY':
+                            fulltime_result = pred_values
+                        elif pred_type == 'BTTS_PROBABILITY':
+                            btts = pred_values
+                        elif pred_type == 'OVER_UNDER_2_5_PROBABILITY':
+                            over_25 = pred_values
+                        elif pred_type == 'CORRECT_SCORE_PROBABILITY':
+                            correct_score = pred_values
+                    
+                    if fulltime_result:
+                        # Extract most likely score from correct score predictions
+                        home_score = 1
+                        away_score = 1
+                        if correct_score and 'scores' in correct_score:
+                            # Find the most likely score
+                            max_prob = 0
+                            for score_str, prob in correct_score['scores'].items():
+                                if '-' in score_str and prob > max_prob:
+                                    try:
+                                        h, a = score_str.split('-')
+                                        if h.isdigit() and a.isdigit():
+                                            max_prob = prob
+                                            home_score = int(h)
+                                            away_score = int(a)
+                                    except:
+                                        pass
+                        
+                        new_prediction = SportMonksPrediction(
+                            fixture_id=fixture.fixture_id,
+                            predictions_data=predictions,  # Store full predictions array
+                            home_win_probability=fulltime_result.get('home', 0) / 100.0,
+                            draw_probability=fulltime_result.get('draw', 0) / 100.0,
+                            away_win_probability=fulltime_result.get('away', 0) / 100.0,
+                            btts_probability=btts.get('yes', 0) / 100.0 if btts else 0.5,
+                            over_25_probability=over_25.get('yes', 0) / 100.0 if over_25 else 0.5,
+                            under_25_probability=over_25.get('no', 0) / 100.0 if over_25 else 0.5,
+                            predicted_home_score=home_score,
+                            predicted_away_score=away_score,
+                            confidence_score=0.75  # Could calculate based on probability strength
+                        )
+                        db.session.add(new_prediction)
+                        count += 1
                     
             except Exception as e:
                 logger.error(f"Error syncing prediction for fixture {fixture.fixture_id}: {str(e)}")
