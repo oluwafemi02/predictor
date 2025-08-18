@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Users, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { api, type Team, type PaginatedResponse, type Player } from '../lib/api';
+import { api, type Team, type PaginatedResponse } from '../lib/api';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
