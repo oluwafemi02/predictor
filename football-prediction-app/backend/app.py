@@ -424,6 +424,15 @@ def create_app(config_name=None):
             }
         }), 200
     
+    # Initialize SportMonks data on startup if configured
+    if app.config.get('SPORTMONKS_API_KEY'):
+        try:
+            from sportmonks_init import initialize_sportmonks_data
+            app.before_first_request_funcs.append(lambda: initialize_sportmonks_data(app))
+            logger.info("SportMonks initialization scheduled")
+        except ImportError as e:
+            logger.error(f"Could not import sportmonks_init: {e}")
+    
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')
     def serve_react_app(path):

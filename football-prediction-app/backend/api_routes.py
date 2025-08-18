@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from models import db, Match, MatchOdds, Team, Player, PlayerPerformance, TeamStatistics
+from sportmonks_models import SportMonksFixture, SportMonksTeam, SportMonksPrediction
 from data_collector import RapidAPIFootballOddsCollector, FootballDataCollector
 from datetime import datetime, timedelta
 import os
@@ -115,14 +116,141 @@ def get_odds_by_date(date_str):
 
 # New endpoints required by frontend
 
+# SportMonks sync endpoint
+@api_bp.route('/data/sync-sportmonks', methods=['POST'])
+def sync_sportmonks_data():
+    """Manually trigger SportMonks data sync"""
+    try:
+        # Check if SportMonks is configured
+        if not os.environ.get('SPORTMONKS_API_KEY'):
+            return jsonify({
+                'status': 'error',
+                'message': 'SportMonks API key not configured'
+            }), 400
+        
+        from sportmonks_init import initialize_sportmonks_data
+        from flask import current_app
+        
+        success = initialize_sportmonks_data(current_app._get_current_object())
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'SportMonks data sync completed successfully'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'SportMonks data sync failed - check logs for details'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error in sync_sportmonks_data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# Fixtures endpoint (alias for matches)
+@api_bp.route('/fixtures', methods=['GET'])
+def get_fixtures():
+    """Alias for get_matches - frontend compatibility"""
+    return get_matches()
+
 @api_bp.route('/matches', methods=['GET'])
 def get_matches():
-    """Get matches with optional filters"""
+    """Get matches with optional filters - uses SportMonks data if available"""
     try:
         # Get query parameters
         status = request.args.get('status')
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
+        
+        # First, try to get SportMonks fixtures
+        sportmonks_query = SportMonksFixture.query
+        
+        # Check if we have SportMonks data
+        if sportmonks_query.count() > 0:
+            # Use SportMonks data
+            logger.info("Using SportMonks fixture data")
+            
+            if status == 'finished':
+                sportmonks_query = sportmonks_query.filter(
+                    SportMonksFixture.state_id.in_([5, 100])  # Finished states
+                )
+            elif status == 'scheduled':
+                sportmonks_query = sportmonks_query.filter(
+                    SportMonksFixture.state_id.in_([1, 2, 3, 4])  # Not started or in progress
+                )
+            
+            # Add date filters
+            date_from = request.args.get('date_from')
+            date_to = request.args.get('date_to')
+            
+            if date_from:
+                try:
+                    date_from_obj = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                    sportmonks_query = sportmonks_query.filter(SportMonksFixture.starting_at >= date_from_obj)
+                except:
+                    pass
+            
+            if date_to:
+                try:
+                    date_to_obj = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                    sportmonks_query = sportmonks_query.filter(SportMonksFixture.starting_at <= date_to_obj)
+                except:
+                    pass
+            
+            # Order by date descending
+            sportmonks_query = sportmonks_query.order_by(SportMonksFixture.starting_at.desc())
+            
+            # Paginate
+            paginated = sportmonks_query.paginate(page=page, per_page=per_page, error_out=False)
+            
+            # Format SportMonks fixtures
+            matches = []
+            for fixture in paginated.items:
+                # Get teams
+                home_team = SportMonksTeam.query.get(fixture.home_team_id)
+                away_team = SportMonksTeam.query.get(fixture.away_team_id)
+                
+                # Check for prediction
+                prediction = SportMonksPrediction.query.filter_by(fixture_id=fixture.fixture_id).first()
+                
+                matches.append({
+                    'id': fixture.fixture_id,
+                    'date': fixture.starting_at.isoformat() if fixture.starting_at else None,
+                    'home_team': {
+                        'id': fixture.home_team_id,
+                        'name': home_team.name if home_team else 'Unknown',
+                        'logo_url': home_team.image_path if home_team else ''
+                    },
+                    'away_team': {
+                        'id': fixture.away_team_id,
+                        'name': away_team.name if away_team else 'Unknown',
+                        'logo_url': away_team.image_path if away_team else ''
+                    },
+                    'home_score': fixture.home_score,
+                    'away_score': fixture.away_score,
+                    'status': fixture.state_name or 'Unknown',
+                    'competition': fixture.league_name,
+                    'venue': fixture.venue_name,
+                    'has_prediction': prediction is not None
+                })
+            
+            return jsonify({
+                'matches': matches,
+                'pagination': {
+                    'page': page,
+                    'pages': paginated.pages,
+                    'total': paginated.total,
+                    'per_page': per_page
+                },
+                'data_source': 'sportmonks'
+            })
+        
+        # Fallback to original Match model if no SportMonks data
+        logger.info("No SportMonks data, falling back to local Match data")
         
         # Build query
         query = Match.query
@@ -618,8 +746,96 @@ def train_model():
 
 @api_bp.route('/teams', methods=['GET'])
 def get_teams():
-    """Get all teams with basic statistics"""
+    """Get all teams with basic statistics - uses SportMonks data if available"""
     try:
+        # Get query parameters
+        search = request.args.get('search', '')
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', 20, type=int)
+        
+        # First, try SportMonks teams
+        sportmonks_teams = SportMonksTeam.query
+        
+        if search:
+            sportmonks_teams = sportmonks_teams.filter(
+                SportMonksTeam.name.ilike(f'%{search}%')
+            )
+        
+        # Check if we have SportMonks data
+        if sportmonks_teams.count() > 0:
+            logger.info("Using SportMonks team data")
+            
+            # Paginate SportMonks teams
+            paginated = sportmonks_teams.paginate(page=page, per_page=page_size, error_out=False)
+            
+            team_data = []
+            for team in paginated.items:
+                # Get team fixtures for statistics
+                fixtures = SportMonksFixture.query.filter(
+                    (SportMonksFixture.home_team_id == team.team_id) | 
+                    (SportMonksFixture.away_team_id == team.team_id),
+                    SportMonksFixture.state_id == 5  # Finished
+                ).all()
+                
+                wins = 0
+                draws = 0
+                losses = 0
+                goals_for = 0
+                goals_against = 0
+                
+                for fixture in fixtures:
+                    if fixture.home_team_id == team.team_id:
+                        goals_for += fixture.home_score or 0
+                        goals_against += fixture.away_score or 0
+                        if fixture.home_score > fixture.away_score:
+                            wins += 1
+                        elif fixture.home_score == fixture.away_score:
+                            draws += 1
+                        else:
+                            losses += 1
+                    else:
+                        goals_for += fixture.away_score or 0
+                        goals_against += fixture.home_score or 0
+                        if fixture.away_score > fixture.home_score:
+                            wins += 1
+                        elif fixture.away_score == fixture.home_score:
+                            draws += 1
+                        else:
+                            losses += 1
+                
+                matches_played = wins + draws + losses
+                
+                team_data.append({
+                    'id': team.team_id,
+                    'name': team.name,
+                    'code': team.short_code,
+                    'logo_url': team.image_path or '',
+                    'stadium': team.venue_name or '',
+                    'founded': team.founded,
+                    'matches_played': matches_played,
+                    'wins': wins,
+                    'draws': draws,
+                    'losses': losses,
+                    'goals_for': goals_for,
+                    'goals_against': goals_against,
+                    'points': wins * 3 + draws,
+                    'form': None  # Would need recent fixtures
+                })
+            
+            return jsonify({
+                'teams': team_data,
+                'pagination': {
+                    'page': page,
+                    'total_pages': paginated.pages,
+                    'total_items': paginated.total,
+                    'page_size': page_size
+                },
+                'data_source': 'sportmonks'
+            })
+        
+        # Fallback to original Team model
+        logger.info("No SportMonks data, falling back to local Team data")
+        
         # Query teams from database
         teams = []
         try:
@@ -1119,12 +1335,109 @@ def get_todays_predictions():
 
 @api_bp.route('/predictions', methods=['GET'])
 def get_predictions():
-    """Get predictions with filters"""
+    """Get predictions with filters - uses SportMonks data if available"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
+        
+        # First, try SportMonks predictions
+        sportmonks_predictions = SportMonksPrediction.query
+        
+        # Check if we have SportMonks predictions
+        if sportmonks_predictions.count() > 0:
+            logger.info("Using SportMonks prediction data")
+            
+            # Apply date filters based on fixture dates
+            if date_from or date_to:
+                # Join with fixtures to filter by date
+                sportmonks_predictions = sportmonks_predictions.join(
+                    SportMonksFixture,
+                    SportMonksPrediction.fixture_id == SportMonksFixture.fixture_id
+                )
+                
+                if date_from:
+                    try:
+                        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+                        sportmonks_predictions = sportmonks_predictions.filter(
+                            SportMonksFixture.starting_at >= date_from_obj
+                        )
+                    except ValueError:
+                        pass
+                
+                if date_to:
+                    try:
+                        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+                        sportmonks_predictions = sportmonks_predictions.filter(
+                            SportMonksFixture.starting_at <= date_to_obj
+                        )
+                    except ValueError:
+                        pass
+            
+            # Order by fixture date
+            sportmonks_predictions = sportmonks_predictions.join(
+                SportMonksFixture,
+                SportMonksPrediction.fixture_id == SportMonksFixture.fixture_id
+            ).order_by(SportMonksFixture.starting_at.asc())
+            
+            # Paginate
+            paginated = sportmonks_predictions.paginate(page=page, per_page=per_page, error_out=False)
+            
+            predictions = []
+            for pred in paginated.items:
+                # Get fixture details
+                fixture = SportMonksFixture.query.filter_by(fixture_id=pred.fixture_id).first()
+                if not fixture:
+                    continue
+                
+                # Get teams
+                home_team = SportMonksTeam.query.get(fixture.home_team_id)
+                away_team = SportMonksTeam.query.get(fixture.away_team_id)
+                
+                predictions.append({
+                    'id': pred.id,
+                    'match': {
+                        'id': fixture.fixture_id,
+                        'date': fixture.starting_at.isoformat() if fixture.starting_at else None,
+                        'home_team': {
+                            'id': fixture.home_team_id,
+                            'name': home_team.name if home_team else 'Unknown'
+                        },
+                        'away_team': {
+                            'id': fixture.away_team_id,
+                            'name': away_team.name if away_team else 'Unknown'
+                        },
+                        'competition': fixture.league_name,
+                        'venue': fixture.venue_name
+                    },
+                    'prediction': {
+                        'home_win': pred.home_win_probability or 0,
+                        'draw': pred.draw_probability or 0,
+                        'away_win': pred.away_win_probability or 0,
+                        'confidence': pred.confidence_score or 0.5,
+                        'predicted_score': {
+                            'home': pred.predicted_home_score or 0,
+                            'away': pred.predicted_away_score or 0
+                        }
+                    },
+                    'created_at': pred.created_at.isoformat() if pred.created_at else None,
+                    'data_source': 'sportmonks'
+                })
+            
+            return jsonify({
+                'predictions': predictions,
+                'pagination': {
+                    'page': page,
+                    'pages': paginated.pages,
+                    'total': paginated.total,
+                    'per_page': per_page
+                },
+                'data_source': 'sportmonks'
+            })
+        
+        # Fallback to original prediction logic
+        logger.info("No SportMonks predictions, falling back to local predictions")
         
         # Get upcoming matches that need predictions
         query = Match.query.filter(
