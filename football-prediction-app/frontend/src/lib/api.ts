@@ -1,10 +1,10 @@
 import axios from 'axios';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 
-// Get API base URL from environment variable or use relative URLs
-// In production, if no env var is set, use relative URLs (same domain)
+// Get API base URL from environment variable
+// For Render deployments, set VITE_API_BASE_URL to your backend URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (import.meta.env.PROD ? '' : 'http://localhost:5000');
+  (import.meta.env.PROD ? 'https://football-prediction-backend-2cvi.onrender.com' : 'http://localhost:5000');
 
 // Create axios instance with defaults
 const apiClient = axios.create({
