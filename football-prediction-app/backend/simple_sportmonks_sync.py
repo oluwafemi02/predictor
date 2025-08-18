@@ -25,9 +25,9 @@ def simple_sync(app):
     
     with app.app_context():
         try:
-            # 1. Get fixtures for today and next 7 days
+            # 1. Get fixtures for past 30 days and next 7 days
             logger.info("Fetching fixtures...")
-            start_date = datetime.utcnow().strftime('%Y-%m-%d')
+            start_date = (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')
             end_date = (datetime.utcnow() + timedelta(days=7)).strftime('%Y-%m-%d')
             
             fixtures_url = f"{base_url}/fixtures/between/{start_date}/{end_date}"
@@ -36,6 +36,9 @@ def simple_sync(app):
                 "filters": "fixtureLeagues:8,564,384,82,301",  # Major leagues
                 "per_page": 100
             }
+            
+            logger.info(f"Requesting: {fixtures_url}")
+            logger.info(f"Date range: {start_date} to {end_date}")
             
             response = requests.get(fixtures_url, headers=headers, params=params)
             
@@ -47,6 +50,8 @@ def simple_sync(app):
             fixtures = data.get('data', [])
             
             logger.info(f"Found {len(fixtures)} fixtures")
+            if len(fixtures) == 0:
+                logger.warning("No fixtures found - check date range and API key permissions")
             
             fixture_count = 0
             team_count = 0
