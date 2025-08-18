@@ -428,7 +428,17 @@ def create_app(config_name=None):
     if app.config.get('SPORTMONKS_API_KEY'):
         try:
             from sportmonks_init import initialize_sportmonks_data
-            app.before_first_request_funcs.append(lambda: initialize_sportmonks_data(app))
+            # Flask 3.0 removed before_first_request, use a flag instead
+            init_done = False
+            
+            @app.before_request
+            def init_sportmonks_on_first_request():
+                nonlocal init_done
+                if not init_done:
+                    init_done = True
+                    logger.info("Initializing SportMonks data on first request...")
+                    initialize_sportmonks_data(app)
+            
             logger.info("SportMonks initialization scheduled")
         except ImportError as e:
             logger.error(f"Could not import sportmonks_init: {e}")
