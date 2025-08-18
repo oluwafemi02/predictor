@@ -128,10 +128,10 @@ def sync_sportmonks_data():
                 'message': 'SportMonks API key not configured'
             }), 400
         
-        from sportmonks_init import initialize_sportmonks_data
-        from flask import current_app
-        
-        success = initialize_sportmonks_data(current_app._get_current_object())
+        from simple_sportmonks_sync import simple_sync
+from flask import current_app
+
+success = simple_sync(current_app._get_current_object())
         
         if success:
             return jsonify({
