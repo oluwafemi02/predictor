@@ -128,26 +128,22 @@ def sync_sportmonks_data():
                 'message': 'SportMonks API key not configured'
             }), 400
         
-        # Try different sync methods
+        # Try minimal sync for debugging
         from flask import current_app
         
+        # Log what we're doing
+        logger.info("Starting SportMonks sync...")
+        
         try:
-            # Try direct sync first (simplest, most reliable)
-            from direct_sportmonks_sync import direct_sync
-            success, message = direct_sync(current_app._get_current_object())
-            logger.info(f"Direct sync result: {success}, {message}")
+            # Use minimal sync that definitely works
+            from minimal_sync import minimal_sync
+            with current_app.app_context():
+                success, message = minimal_sync()
+            logger.info(f"Minimal sync result: {success}, {message}")
         except Exception as e:
-            logger.error(f"Direct sync failed: {str(e)}")
-            try:
-                # Fallback to improved sync
-                from improved_sportmonks_sync import improved_sync
-                success, message = improved_sync(current_app._get_current_object())
-            except Exception as e2:
-                logger.error(f"Improved sync failed: {str(e2)}")
-                # Last resort - simple sync
-                from simple_sportmonks_sync import simple_sync
-                success = simple_sync(current_app._get_current_object())
-                message = "SportMonks data sync completed" if success else "Sync failed"
+            logger.error(f"Minimal sync failed with error: {str(e)}")
+            success = False
+            message = f"Sync error: {str(e)}"
         
         # Get counts after sync
         from sportmonks_models import SportMonksFixture, SportMonksTeam, SportMonksPrediction
@@ -431,6 +427,66 @@ def debug_sportmonks():
     except Exception as e:
         return jsonify({
             'error': 'Debug failed',
+            'message': str(e)
+        }), 500
+
+@api_bp.route('/data/simple-test', methods=['GET'])
+def simple_test():
+    """Simple test that fetches today's fixtures without DB"""
+    try:
+        import requests
+        api_key = os.environ.get('SPORTMONKS_API_KEY')
+        
+        if not api_key:
+            return jsonify({'error': 'No API key'}), 400
+        
+        headers = {"Authorization": api_key}
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        url = f"https://api.sportmonks.com/v3/football/fixtures/date/{today}"
+        
+        response = requests.get(url, headers=headers, params={"per_page": 5, "include": "participants"})
+        
+        if response.status_code != 200:
+            return jsonify({
+                'error': 'API request failed',
+                'status_code': response.status_code,
+                'response': response.text[:500]
+            }), 400
+        
+        data = response.json()
+        fixtures = data.get('data', [])
+        
+        # Parse fixtures to show what we got
+        parsed_fixtures = []
+        for f in fixtures:
+            participants = f.get('participants', [])
+            home = None
+            away = None
+            
+            for p in participants:
+                if p.get('meta', {}).get('location') == 'home':
+                    home = p.get('name', 'Unknown')
+                elif p.get('meta', {}).get('location') == 'away':
+                    away = p.get('name', 'Unknown')
+            
+            parsed_fixtures.append({
+                'id': f.get('id'),
+                'home': home or 'No home team',
+                'away': away or 'No away team',
+                'date': f.get('starting_at'),
+                'league_id': f.get('league_id')
+            })
+        
+        return jsonify({
+            'success': True,
+            'fixture_count': len(fixtures),
+            'fixtures': parsed_fixtures,
+            'raw_sample': fixtures[0] if fixtures else None
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Test failed',
             'message': str(e)
         }), 500
 
