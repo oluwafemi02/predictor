@@ -33,9 +33,11 @@ def simple_sync(app):
             fixtures_url = f"{base_url}/fixtures/between/{start_date}/{end_date}"
             params = {
                 "include": "participants;league;venue;state;scores;predictions.type",
-                "filters": "fixtureLeagues:8,564,384,82,301",  # Major leagues
                 "per_page": 100
             }
+            
+            # Try without league filter first to see if we get any data
+            logger.info("Trying without league filter...")
             
             logger.info(f"Requesting: {fixtures_url}")
             logger.info(f"Date range: {start_date} to {end_date}")
