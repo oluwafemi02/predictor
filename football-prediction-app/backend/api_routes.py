@@ -128,17 +128,26 @@ def sync_sportmonks_data():
                 'message': 'SportMonks API key not configured'
             }), 400
         
-        # Try improved sync first, fallback to simple sync
+        # Try different sync methods
         from flask import current_app
         
         try:
-            from improved_sportmonks_sync import improved_sync
-            success, message = improved_sync(current_app._get_current_object())
-        except ImportError:
-            logger.info("Improved sync not available, using simple sync")
-            from simple_sportmonks_sync import simple_sync
-            success = simple_sync(current_app._get_current_object())
-            message = "SportMonks data sync completed" if success else "Sync failed"
+            # Try direct sync first (simplest, most reliable)
+            from direct_sportmonks_sync import direct_sync
+            success, message = direct_sync(current_app._get_current_object())
+            logger.info(f"Direct sync result: {success}, {message}")
+        except Exception as e:
+            logger.error(f"Direct sync failed: {str(e)}")
+            try:
+                # Fallback to improved sync
+                from improved_sportmonks_sync import improved_sync
+                success, message = improved_sync(current_app._get_current_object())
+            except Exception as e2:
+                logger.error(f"Improved sync failed: {str(e2)}")
+                # Last resort - simple sync
+                from simple_sportmonks_sync import simple_sync
+                success = simple_sync(current_app._get_current_object())
+                message = "SportMonks data sync completed" if success else "Sync failed"
         
         # Get counts after sync
         from sportmonks_models import SportMonksFixture, SportMonksTeam, SportMonksPrediction
@@ -302,6 +311,127 @@ def test_sportmonks_api():
             'status': 'error',
             'message': str(e),
             'api_key_present': bool(os.environ.get('SPORTMONKS_API_KEY'))
+        }), 500
+
+@api_bp.route('/data/debug-sportmonks', methods=['GET'])
+def debug_sportmonks():
+    """Debug SportMonks sync issues"""
+    try:
+        import requests
+        from flask import current_app
+        
+        api_key = os.environ.get('SPORTMONKS_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'No API key'}), 400
+        
+        headers = {"Authorization": api_key}
+        debug_info = {
+            'api_key_present': True,
+            'api_key_prefix': api_key[:10] + '...',
+            'database_url': bool(os.environ.get('DATABASE_URL')),
+            'flask_env': os.environ.get('FLASK_ENV', 'not set'),
+            'tests': []
+        }
+        
+        # Test 1: Can we connect to DB?
+        try:
+            from sportmonks_models import SportMonksFixture
+            count = SportMonksFixture.query.count()
+            debug_info['tests'].append({
+                'test': 'database_connection',
+                'success': True,
+                'current_fixtures': count
+            })
+        except Exception as e:
+            debug_info['tests'].append({
+                'test': 'database_connection',
+                'success': False,
+                'error': str(e)
+            })
+        
+        # Test 2: Can we fetch and parse data?
+        try:
+            today = datetime.utcnow().strftime('%Y-%m-%d')
+            url = f"https://api.sportmonks.com/v3/football/fixtures/date/{today}"
+            response = requests.get(url, headers=headers, params={"per_page": 1})
+            
+            if response.status_code == 200:
+                data = response.json()
+                fixtures = data.get('data', [])
+                if fixtures:
+                    fixture = fixtures[0]
+                    participants = fixture.get('participants', [])
+                    debug_info['tests'].append({
+                        'test': 'api_fetch_and_parse',
+                        'success': True,
+                        'sample_fixture_id': fixture.get('id'),
+                        'has_participants': len(participants) > 0,
+                        'participant_count': len(participants)
+                    })
+                else:
+                    debug_info['tests'].append({
+                        'test': 'api_fetch_and_parse',
+                        'success': False,
+                        'error': 'No fixtures found'
+                    })
+            else:
+                debug_info['tests'].append({
+                    'test': 'api_fetch_and_parse',
+                    'success': False,
+                    'status_code': response.status_code
+                })
+        except Exception as e:
+            debug_info['tests'].append({
+                'test': 'api_fetch_and_parse',
+                'success': False,
+                'error': str(e)
+            })
+        
+        # Test 3: Try a mini sync
+        try:
+            with current_app.app_context():
+                from sportmonks_models import db, SportMonksTeam
+                
+                # Try to save a test team
+                test_team = SportMonksTeam(
+                    team_id=999999,
+                    name="Test Team",
+                    short_code="TST",
+                    logo_path=""
+                )
+                db.session.add(test_team)
+                db.session.commit()
+                
+                # Check if it was saved
+                saved = SportMonksTeam.query.filter_by(team_id=999999).first()
+                if saved:
+                    # Clean up
+                    db.session.delete(saved)
+                    db.session.commit()
+                    debug_info['tests'].append({
+                        'test': 'database_write',
+                        'success': True,
+                        'message': 'Can write and delete from database'
+                    })
+                else:
+                    debug_info['tests'].append({
+                        'test': 'database_write',
+                        'success': False,
+                        'error': 'Could not find saved team'
+                    })
+        except Exception as e:
+            debug_info['tests'].append({
+                'test': 'database_write',
+                'success': False,
+                'error': str(e)
+            })
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Debug failed',
+            'message': str(e)
         }), 500
 
 # Fixtures endpoint (alias for matches)
