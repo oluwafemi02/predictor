@@ -66,9 +66,19 @@ def sync_leagues(client):
         count = 0
         for league_id in popular_league_ids:
             try:
-                league_data = client.get_league(league_id)
+                # Use get_leagues with specific ID filter instead
+                league_data = client.get_leagues()
                 if league_data and 'data' in league_data:
-                    league = league_data['data']
+                    # Find the specific league in the response
+                    league = None
+                    for l in league_data['data']:
+                        if l.get('id') == league_id:
+                            league = l
+                            break
+                    
+                    if not league:
+                        logger.warning(f"League {league_id} not found")
+                        continue
                     
                     # Check if league exists
                     existing = SportMonksLeague.query.filter_by(league_id=league['id']).first()
