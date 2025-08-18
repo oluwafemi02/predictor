@@ -219,7 +219,7 @@ def get_matches():
                 
                 matches.append({
                     'id': fixture.fixture_id,
-                    'date': fixture.starting_at.isoformat() if fixture.starting_at else None,
+                    'match_date': fixture.starting_at.isoformat() if fixture.starting_at else None,
                     'home_team': {
                         'id': fixture.home_team_id,
                         'name': home_team.name if home_team else 'Unknown',
@@ -239,13 +239,11 @@ def get_matches():
                 })
             
             return jsonify({
-                'matches': matches,
-                'pagination': {
-                    'page': page,
-                    'pages': paginated.pages,
-                    'total': paginated.total,
-                    'per_page': per_page
-                },
+                'data': matches,
+                'page': page,
+                'total_pages': paginated.pages,
+                'total_items': paginated.total,
+                'page_size': per_page,
                 'data_source': 'sportmonks'
             })
         
@@ -296,7 +294,7 @@ def get_matches():
         for match in paginated.items:
             matches.append({
                 'id': match.id,
-                'date': match.match_date.isoformat() if match.match_date else None,
+                'match_date': match.match_date.isoformat() if match.match_date else None,
                 'home_team': {
                     'id': match.home_team_id,
                     'name': match.home_team.name if match.home_team else 'Unknown',
@@ -316,26 +314,22 @@ def get_matches():
             })
         
         return jsonify({
-            'matches': matches,
-            'pagination': {
-                'page': page,
-                'pages': paginated.pages,
-                'total': paginated.total,
-                'per_page': per_page
-            }
+            'data': matches,
+            'page': page,
+            'total_pages': paginated.pages,
+            'total_items': paginated.total,
+            'page_size': per_page
         })
     except Exception as e:
         logger.error(f"Error in get_matches: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e),
-            'matches': [],
-            'pagination': {
-                'page': 1,
-                'pages': 0,
-                'total': 0,
-                'per_page': per_page
-            }
+            'data': [],
+            'page': 1,
+            'total_pages': 0,
+            'total_items': 0,
+            'page_size': per_page
         })
 
 @api_bp.route('/upcoming-matches', methods=['GET'])
@@ -823,13 +817,11 @@ def get_teams():
                 })
             
             return jsonify({
-                'teams': team_data,
-                'pagination': {
-                    'page': page,
-                    'total_pages': paginated.pages,
-                    'total_items': paginated.total,
-                    'page_size': page_size
-                },
+                'data': team_data,
+                'page': page,
+                'total_pages': paginated.pages,
+                'total_items': paginated.total,
+                'page_size': page_size,
                 'data_source': 'sportmonks'
             })
         
@@ -922,14 +914,22 @@ def get_teams():
             })
         
         return jsonify({
-            'teams': team_data
+            'data': team_data,
+            'page': 1,
+            'total_pages': 1,
+            'total_items': len(team_data),
+            'page_size': len(team_data)
         })
     except Exception as e:
         logger.error(f"Error in get_teams: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e),
-            'teams': []  # Return empty array to prevent frontend errors
+            'data': [],  # Return empty array to prevent frontend errors
+            'page': 1,
+            'total_pages': 0,
+            'total_items': 0,
+            'page_size': 20
         }), 200  # Return 200 instead of 500 to prevent retries
 
 @api_bp.route('/teams/<int:team_id>', methods=['GET'])
@@ -1399,7 +1399,7 @@ def get_predictions():
                     'id': pred.id,
                     'match': {
                         'id': fixture.fixture_id,
-                        'date': fixture.starting_at.isoformat() if fixture.starting_at else None,
+                        'match_date': fixture.starting_at.isoformat() if fixture.starting_at else None,
                         'home_team': {
                             'id': fixture.home_team_id,
                             'name': home_team.name if home_team else 'Unknown'
@@ -1426,13 +1426,11 @@ def get_predictions():
                 })
             
             return jsonify({
-                'predictions': predictions,
-                'pagination': {
-                    'page': page,
-                    'pages': paginated.pages,
-                    'total': paginated.total,
-                    'per_page': per_page
-                },
+                'data': predictions,
+                'page': page,
+                'total_pages': paginated.pages,
+                'total_items': paginated.total,
+                'page_size': per_page,
                 'data_source': 'sportmonks'
             })
         
@@ -1502,7 +1500,7 @@ def get_predictions():
                 'id': match.id,
                 'match': {
                     'id': match.id,
-                    'date': match.match_date.isoformat() if match.match_date else None,
+                    'match_date': match.match_date.isoformat() if match.match_date else None,
                     'home_team': {
                         'id': match.home_team_id,
                         'name': match.home_team.name if match.home_team else 'Unknown'
@@ -1528,13 +1526,11 @@ def get_predictions():
             })
         
         return jsonify({
-            'predictions': predictions,
-            'pagination': {
-                'page': page,
-                'pages': paginated.pages,
-                'total': paginated.total,
-                'per_page': per_page
-            }
+            'data': predictions,
+            'page': page,
+            'total_pages': paginated.pages,
+            'total_items': paginated.total,
+            'page_size': per_page
         })
     except Exception as e:
         logger.error(f"Error getting predictions: {str(e)}")
