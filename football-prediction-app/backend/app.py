@@ -425,23 +425,10 @@ def create_app(config_name=None):
         }), 200
     
     # Initialize SportMonks data on startup if configured
+    # Disable auto-init for now to ensure app starts successfully
+    # SportMonks data can be synced manually via /api/v1/data/sync-sportmonks
     if app.config.get('SPORTMONKS_API_KEY'):
-        try:
-            from sportmonks_init import initialize_sportmonks_data
-            # Flask 3.0 removed before_first_request, use a flag instead
-            init_done = False
-            
-            @app.before_request
-            def init_sportmonks_on_first_request():
-                nonlocal init_done
-                if not init_done:
-                    init_done = True
-                    logger.info("Initializing SportMonks data on first request...")
-                    initialize_sportmonks_data(app)
-            
-            logger.info("SportMonks initialization scheduled")
-        except ImportError as e:
-            logger.error(f"Could not import sportmonks_init: {e}")
+        logger.info("SportMonks API key configured - use /api/v1/data/sync-sportmonks to sync data")
     
     # Catch-all route for React app - must be last
     @app.route('/<path:path>')

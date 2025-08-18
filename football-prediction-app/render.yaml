@@ -1,0 +1,29 @@
+services:
+  # Backend web service
+  - type: web
+    name: football-prediction-backend
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn wsgi:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENV
+        value: production
+      - key: FLASK_ENV
+        value: production
+    
+  # Frontend static site
+  - type: web
+    name: football-prediction-frontend
+    runtime: static
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: ./frontend/build
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
