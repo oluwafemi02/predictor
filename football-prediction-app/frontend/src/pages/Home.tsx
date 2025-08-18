@@ -4,7 +4,13 @@ import { Calendar, TrendingUp, Users, Activity } from 'lucide-react';
 import { api } from '../lib/api';
 
 export function Home() {
-  const { data: version } = useQuery({
+  const { data: version } = useQuery<{
+    version: string;
+    git_commit: string;
+    deployment_time: string;
+    environment: string;
+    features: Record<string, boolean>;
+  }>({
     queryKey: ['version'],
     queryFn: api.getVersion,
   });

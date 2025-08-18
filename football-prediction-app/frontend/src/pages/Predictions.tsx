@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, startOfDay } from 'date-fns';
 import { TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, type PaginatedResponse, type Prediction } from '../lib/api';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
@@ -14,7 +14,7 @@ export function Predictions() {
   const [dateTo, setDateTo] = useState(format(addDays(today, 7), 'yyyy-MM-dd'));
   const [page, setPage] = useState(1);
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery<PaginatedResponse<Prediction>>({
     queryKey: ['predictions', dateFrom, dateTo, page],
     queryFn: () => api.getPredictions({ 
       date_from: dateFrom, 
@@ -22,7 +22,7 @@ export function Predictions() {
       page, 
       page_size: 20 
     }),
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 
   const handleDateChange = (from: string, to: string) => {

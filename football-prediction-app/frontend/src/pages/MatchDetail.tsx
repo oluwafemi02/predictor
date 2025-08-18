@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Calendar, MapPin, Trophy, ArrowLeft } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, type Match } from '../lib/api';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
 
@@ -10,7 +10,7 @@ export function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const matchId = parseInt(id || '0', 10);
 
-  const { data: match, isLoading, error, refetch } = useQuery({
+  const { data: match, isLoading, error, refetch } = useQuery<Match>({
     queryKey: ['match', matchId],
     queryFn: () => api.getMatchDetails(matchId),
     enabled: !!matchId,

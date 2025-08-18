@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Users, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { api, Team, Player } from '../lib/api';
+import { api, type Team, type PaginatedResponse, type Player } from '../lib/api';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
@@ -11,10 +11,10 @@ export function Teams() {
   const [page, setPage] = useState(1);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery<PaginatedResponse<Team>>({
     queryKey: ['teams', search, page],
     queryFn: () => api.getTeams({ search, page, page_size: 20 }),
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 
   const handleSearch = (value: string) => {
