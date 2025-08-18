@@ -2595,6 +2595,12 @@ def get_team_players(team_id):
         logger.error(f"Error getting team players: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# Alias for frontend compatibility
+@api_bp.route('/teams/<int:team_id>/squad', methods=['GET'])
+def get_team_squad(team_id):
+    """Alias for get_team_players to match frontend expectations"""
+    return get_team_players(team_id)
+
 @api_bp.route('/dashboard/summary', methods=['GET'])
 def get_dashboard_summary():
     """Get dashboard summary including upcoming matches"""
