@@ -128,20 +128,27 @@ def sync_sportmonks_data():
                 'message': 'SportMonks API key not configured'
             }), 400
         
-        # Try minimal sync for debugging
         from flask import current_app
         
-        # Log what we're doing
-        logger.info("Starting SportMonks sync...")
-        
+        # Try auto-fix sync first
         try:
-            # Use minimal sync that definitely works
-            from minimal_sync import minimal_sync
-            with current_app.app_context():
-                success, message = minimal_sync()
-            logger.info(f"Minimal sync result: {success}, {message}")
+            from auto_fix_sync import auto_fix_sync
+            logger.info("Running auto-fix sync...")
+            
+            fix_results = auto_fix_sync(current_app._get_current_object())
+            
+            if fix_results['final_status'] == 'fixed' and fix_results['data_synced']:
+                success = True
+                message = "Auto-fix sync completed successfully"
+                logger.info(f"Auto-fix sync succeeded: {fix_results['diagnosis']}")
+            else:
+                # Fallback to minimal sync
+                logger.info("Auto-fix didn't work, trying minimal sync...")
+                from minimal_sync import minimal_sync
+                with current_app.app_context():
+                    success, message = minimal_sync()
         except Exception as e:
-            logger.error(f"Minimal sync failed with error: {str(e)}")
+            logger.error(f"All sync methods failed: {str(e)}")
             success = False
             message = f"Sync error: {str(e)}"
         
@@ -174,6 +181,30 @@ def sync_sportmonks_data():
             
     except Exception as e:
         logger.error(f"Error in sync_sportmonks_data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@api_bp.route('/data/auto-diagnose', methods=['GET'])
+def auto_diagnose():
+    """Run automatic diagnosis and return results"""
+    try:
+        from flask import current_app
+        from auto_fix_sync import auto_fix_sync
+        
+        # Run diagnosis without syncing
+        results = auto_fix_sync(current_app._get_current_object())
+        
+        return jsonify({
+            'status': 'success',
+            'diagnosis': results['diagnosis'],
+            'fixes_applied': results['fixes_applied'],
+            'final_status': results['final_status'],
+            'data_synced': results['data_synced']
+        })
+        
+    except Exception as e:
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -509,9 +540,27 @@ def get_matches():
         sportmonks_query = SportMonksFixture.query
         
         # Check if we have SportMonks data
-        if sportmonks_query.count() > 0:
-            # Use SportMonks data
-            logger.info("Using SportMonks fixture data")
+        sportmonks_count = sportmonks_query.count()
+        
+        # If no database data, try live API
+        if sportmonks_count == 0:
+            logger.info("No SportMonks data in DB, trying live API")
+            try:
+                from live_sportmonks import LiveSportMonks
+                live = LiveSportMonks()
+                result = live.get_fixtures(status=status, page=page, per_page=per_page)
+                
+                if not result.get('error'):
+                    logger.info(f"Successfully fetched {len(result.get('data', []))} fixtures from live API")
+                    return jsonify(result)
+                else:
+                    logger.warning(f"Live API error: {result.get('error')}")
+            except Exception as e:
+                logger.error(f"Failed to use live API: {str(e)}")
+        
+        if sportmonks_count > 0:
+            # Use SportMonks data from database
+            logger.info("Using SportMonks fixture data from database")
             
             if status == 'finished':
                 sportmonks_query = sportmonks_query.filter(
@@ -1095,8 +1144,26 @@ def get_teams():
             )
         
         # Check if we have SportMonks data
-        if sportmonks_teams.count() > 0:
-            logger.info("Using SportMonks team data")
+        sportmonks_count = sportmonks_teams.count()
+        
+        # If no database data, try live API
+        if sportmonks_count == 0:
+            logger.info("No SportMonks teams in DB, trying live API")
+            try:
+                from live_sportmonks import LiveSportMonks
+                live = LiveSportMonks()
+                result = live.get_teams(page=page, per_page=page_size)
+                
+                if not result.get('error'):
+                    logger.info(f"Successfully fetched {len(result.get('data', []))} teams from live API")
+                    return jsonify(result)
+                else:
+                    logger.warning(f"Live API error: {result.get('error')}")
+            except Exception as e:
+                logger.error(f"Failed to use live API: {str(e)}")
+        
+        if sportmonks_count > 0:
+            logger.info("Using SportMonks team data from database")
             
             # Paginate SportMonks teams
             paginated = sportmonks_teams.paginate(page=page, per_page=page_size, error_out=False)
